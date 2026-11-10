@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --binesh-turquoise: #08A9C5;
+    --binesh-navy: #062B4D;
+    --binesh-dark-turquoise: #087A9D;
+    --binesh-light-aqua: #3CDDDD;
+    --binesh-bg: #F7FAFC;
+    --binesh-white: #FFFFFF;
+    --binesh-soft-aqua: #EAF7F9;
+    --binesh-text-primary: #263B50;
+    --binesh-text-secondary: #435466;
+    --binesh-text-muted: #64748B;
+    --binesh-border: #E3EBF0;
+  }
+
+  html {
+    font-family: 'Vazirmatn', 'Inter', system-ui, -apple-system, sans-serif;
+    direction: rtl;
+    background-color: #F7FAFC;
+    color: #263B50;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Vazirmatn', 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #F7FAFC;
+    color: #263B50;
+    overflow-x: hidden;
+  }
+
+  .font-en {
+    font-family: 'Inter', 'Vazirmatn', sans-serif;
+  }
+
+  .font-mono-num {
+    font-family: 'JetBrains Mono', 'Vazirmatn', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Subtle architectural grid pattern for placeholders & dashboard surfaces */
+.bg-binesh-grid {
+  background-image: radial-gradient(#08A9C5 0.75px, transparent 0.75px);
+  background-size: 20px 20px;
+}
+
+.bg-binesh-blueprint {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(8, 169, 197, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(8, 169, 197, 0.08) 1px, transparent 1px);
+}

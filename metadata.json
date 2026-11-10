@@ -1,0 +1,6 @@
+{
+  "name": "BINESH | هوش تجاری، تحلیل داده و مشاوره کسب‌وکار",
+  "description": "بینش با طراحی داشبوردهای مدیریتی، تحلیل مستمر و مشاوره کسب‌وکار به شناخت بهتر عملکرد و تصمیم‌گیری آگاهانه‌تر کمک می‌کند.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
