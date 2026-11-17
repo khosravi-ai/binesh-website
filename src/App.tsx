@@ -1,0 +1,703 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Menu, X, ShieldCheck, PhoneCall } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  RoutePath,
+  PORTFOLIO_PLACEHOLDERS,
+  INSIGHTS_PLACEHOLDERS,
+  PortfolioPlaceholderItem,
+  InsightPlaceholderItem
+} from './data/bineshData';
+import { SEO_META } from './data/seoMeta';
+import { contactInfo as defaultContactInfo, ContactInfo } from './data/contactInfo';
+import { BineshLogo, ConsultationModal } from './components/BrandComponents';
+import { HomePage } from './pages/HomePage';
+import { ServicesPages } from './pages/ServicesPages';
+import { DemosPages } from './pages/DemosPages';
+import { ContentPages } from './pages/ContentPages';
+import { PortalAndAuthPages, AuthUserInfo } from './pages/PortalAndAuthPages';
+import { AdminPage } from './pages/AdminPage';
+import { DesignSystemAndSitemapPage } from './pages/DesignSystemAndSitemapPage';
+import { apiFetch, getAuthToken } from './lib/submitRequest';
+
+export default function App() {
+  const [currentRoute, setCurrentRoute] = useState<RoutePath>('/');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [consultationModalOpen, setConsultationModalOpen] = useState(false);
+  const [consultationServiceTitle, setConsultationServiceTitle] = useState<string | undefined>(
+    undefined
+  );
+
+  // Live Database State
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioPlaceholderItem[]>(
+    PORTFOLIO_PLACEHOLDERS
+  );
+  const [insightPosts, setInsightPosts] = useState<
+    (InsightPlaceholderItem & { content?: string })[]
+  >(INSIGHTS_PLACEHOLDERS);
+  const [siteContactInfo, setSiteContactInfo] = useState<ContactInfo>(defaultContactInfo);
+  const [authUser, setAuthUser] = useState<AuthUserInfo | null>(null);
+
+  const refreshPublicData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/public/bootstrap');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok) {
+          if (Array.isArray(data.portfolio) && data.portfolio.length > 0) {
+            setPortfolioItems(data.portfolio);
+          }
+          if (Array.isArray(data.insights) && data.insights.length > 0) {
+            setInsightPosts(data.insights);
+          }
+          if (data.contactInfo) {
+            setSiteContactInfo(data.contactInfo);
+          }
+        }
+      }
+    } catch {
+      // Fallback to static data if offline
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPublicData();
+    const token = getAuthToken();
+    if (token) {
+      apiFetch('/api/auth/me')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d?.ok && d.user) {
+            setAuthUser(d.user);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [refreshPublicData]);
+
+  const contactInfo = siteContactInfo;
+
+  // Sync with browser pathname on load and popstate
+  useEffect(() => {
+    const validRoutes: RoutePath[] = [
+      '/',
+      '/services',
+      '/services/dashboards',
+      '/services/bi-analytics',
+      '/services/consulting',
+      '/demos',
+      '/portfolio',
+      '/insights',
+      '/about',
+      '/contact',
+      '/privacy',
+      '/auth',
+      '/portal',
+      '/admin',
+      '/design-system'
+    ];
+    const rawPath = window.location.pathname;
+    if (rawPath === '/demos/web-dashboard' || rawPath === '/demos/power-bi') {
+      setCurrentRoute('/demos');
+    } else if (validRoutes.includes(rawPath as RoutePath)) {
+      setCurrentRoute(rawPath as RoutePath);
+    }
+
+    const handlePopState = () => {
+      const nextPath = window.location.pathname;
+      if (nextPath === '/demos/web-dashboard' || nextPath === '/demos/power-bi') {
+        setCurrentRoute('/demos');
+      } else if (validRoutes.includes(nextPath as RoutePath)) {
+        setCurrentRoute(nextPath as RoutePath);
+      } else {
+        setCurrentRoute('/');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // SEO title, description & robots synchronization on route change
+  useEffect(() => {
+    const meta = SEO_META[currentRoute] || SEO_META['/'];
+    document.title = meta.title;
+
+    let descTag = document.querySelector('meta[name="description"]');
+    if (!descTag) {
+      descTag = document.createElement('meta');
+      descTag.setAttribute('name', 'description');
+      document.head.appendChild(descTag);
+    }
+    descTag.setAttribute('content', meta.description);
+
+    let robotsTag = document.querySelector('meta[name="robots"]');
+    if (!robotsTag) {
+      robotsTag = document.createElement('meta');
+      robotsTag.setAttribute('name', 'robots');
+      document.head.appendChild(robotsTag);
+    }
+    robotsTag.setAttribute('content', meta.noindex ? 'noindex' : 'index,follow');
+  }, [currentRoute]);
+
+  const handleNavigate = (route: RoutePath) => {
+    setCurrentRoute(route);
+    setMobileMenuOpen(false);
+    try {
+      window.history.pushState({}, '', route);
+    } catch {
+      // Ignore pushState restrictions in sandboxed environments
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenConsultation = (serviceTitle?: string) => {
+    setConsultationServiceTitle(serviceTitle);
+    setConsultationModalOpen(true);
+  };
+
+  const isServiceActive = currentRoute.startsWith('/services');
+  const isDemoActive = currentRoute.startsWith('/demos');
+
+  const hasAnyContactInfo = Boolean(
+    contactInfo.phone ||
+      contactInfo.email ||
+      contactInfo.address ||
+      contactInfo.workingHours ||
+      contactInfo.linkedin ||
+      contactInfo.telegram ||
+      contactInfo.otherSocial
+  );
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#F7FAFC] text-[#263B50]" dir="rtl">
+      {/* =====================================================================
+          STICKY TOP HEADER (Focused 4-Item Navigation + Conversion CTA)
+      ===================================================================== */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E3EBF0]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-6">
+          {/* Zone 1: Official BINESH Logo */}
+          <button
+            type="button"
+            onClick={() => handleNavigate('/')}
+            className="focus:outline-none cursor-pointer shrink-0"
+          >
+            <BineshLogo size="md" />
+          </button>
+
+          {/* Zone 2: Focused 4-Item Primary Navigation (No Dropdown Clutter) */}
+          <nav className="hidden lg:flex items-center gap-8 text-sm font-medium text-[#435466]">
+            <button
+              type="button"
+              onClick={() => handleNavigate('/')}
+              className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                currentRoute === '/'
+                  ? 'text-[#087A9D] font-bold border-b-2 border-[#08A9C5]'
+                  : 'hover:text-[#062B4D]'
+              }`}
+            >
+              خانه
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigate('/services')}
+              className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isServiceActive
+                  ? 'text-[#087A9D] font-bold border-b-2 border-[#08A9C5]'
+                  : 'hover:text-[#062B4D]'
+              }`}
+            >
+              خدمات
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigate('/demos')}
+              className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isDemoActive
+                  ? 'text-[#087A9D] font-bold border-b-2 border-[#08A9C5]'
+                  : 'hover:text-[#062B4D]'
+              }`}
+            >
+              دموهای تعاملی
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigate('/portfolio')}
+              className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                currentRoute === '/portfolio'
+                  ? 'text-[#087A9D] font-bold border-b-2 border-[#08A9C5]'
+                  : 'hover:text-[#062B4D]'
+              }`}
+            >
+              نمونه‌کارها
+            </button>
+          </nav>
+
+          {/* Zone 3: Admin Badge (only if admin) & Primary Conversion CTA */}
+          <div className="hidden lg:flex items-center gap-3 shrink-0">
+            {authUser?.role === 'admin' && (
+              <button
+                type="button"
+                onClick={() => handleNavigate('/admin')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  currentRoute === '/admin'
+                    ? 'bg-[#062B4D] text-white'
+                    : 'bg-[#EAF7F9] text-[#087A9D] hover:bg-[#062B4D] hover:text-white'
+                }`}
+              >
+                پنل مدیریت
+              </button>
+            )}
+
+            {authUser && (
+              <button
+                type="button"
+                onClick={() => handleNavigate('/portal')}
+                className={`px-3 py-2 rounded-xl text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  currentRoute === '/portal'
+                    ? 'bg-[#EAF7F9] text-[#087A9D] font-bold'
+                    : 'text-[#435466] hover:text-[#062B4D]'
+                }`}
+              >
+                پورتال مشتریان ({authUser.fullName})
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => handleOpenConsultation()}
+              className="px-4 py-2.5 rounded-xl bg-[#087A9D] text-white text-xs font-bold hover:bg-[#062B4D] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
+            >
+              جلسه رایگان عیب‌یابی داده
+            </button>
+          </div>
+
+          {/* Mobile Quick Actions & Hamburger Button */}
+          <div className="flex lg:hidden items-center gap-2">
+            <a
+              href={`tel:${contactInfo.phone || '09164006698'}`}
+              aria-label="تماس تلفنی مستقیم"
+              className="p-2 rounded-xl bg-[#EAF7F9] text-[#087A9D] border border-[#08A9C5]/30"
+              title="تماس تلفنی با یک لمس"
+            >
+              <PhoneCall className="w-4 h-4" />
+            </a>
+            <button
+              type="button"
+              onClick={() => handleOpenConsultation()}
+              className="px-3 py-2 rounded-xl bg-[#087A9D] text-white text-xs font-bold whitespace-nowrap"
+            >
+              جلسه رایگان عیب‌یابی داده
+            </button>
+            <button
+              type="button"
+              aria-label="منوی موبایل"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-xl border border-[#E3EBF0] text-[#062B4D] bg-[#F7FAFC]"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Hamburger Drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t border-[#E3EBF0] bg-white px-4 py-5 space-y-3 shadow-lg">
+            <div className="grid grid-cols-1 gap-1.5 text-sm">
+              <button
+                type="button"
+                onClick={() => handleNavigate('/')}
+                className="text-right px-3.5 py-2.5 rounded-xl font-bold text-[#062B4D] hover:bg-[#F7FAFC]"
+              >
+                خانه
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/services')}
+                className="text-right px-3.5 py-2.5 rounded-xl font-bold text-[#062B4D] hover:bg-[#F7FAFC]"
+              >
+                خدمات
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/demos')}
+                className="text-right px-3.5 py-2.5 rounded-xl font-bold text-[#062B4D] hover:bg-[#F7FAFC]"
+              >
+                دموهای تعاملی
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/portfolio')}
+                className="text-right px-3.5 py-2.5 rounded-xl font-bold text-[#062B4D] hover:bg-[#F7FAFC]"
+              >
+                نمونه‌کارها
+              </button>
+
+              <div className="h-px bg-[#E3EBF0] my-1" />
+
+              <button
+                type="button"
+                onClick={() => handleNavigate('/insights')}
+                className="text-right px-3.5 py-2 rounded-xl text-xs font-medium text-[#435466] hover:bg-[#F7FAFC]"
+              >
+                بینش‌نامه (مقالات آموزشی)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/about')}
+                className="text-right px-3.5 py-2 rounded-xl text-xs font-medium text-[#435466] hover:bg-[#F7FAFC]"
+              >
+                درباره بینش
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/contact')}
+                className="text-right px-3.5 py-2 rounded-xl text-xs font-medium text-[#435466] hover:bg-[#F7FAFC]"
+              >
+                تماس با بینش
+              </button>
+            </div>
+
+            {/* Mobile Quick Direct Contact Bar */}
+            <div className="pt-3 border-t border-[#E3EBF0] grid grid-cols-2 gap-2">
+              <a
+                href={`tel:${contactInfo.phone || '09164006698'}`}
+                className="py-2.5 px-3 rounded-xl bg-[#062B4D] text-white text-xs font-bold text-center flex items-center justify-center gap-1.5"
+              >
+                <PhoneCall className="w-3.5 h-3.5 text-[#3CDDDD]" />
+                <span>تماس تلفنی مستقیم</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/portal')}
+                className="py-2.5 px-3 rounded-xl bg-[#EAF7F9] text-xs font-bold text-[#062B4D]"
+              >
+                پورتال مشتریان
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* =====================================================================
+          MAIN PAGE ROUTER VIEWPORT (Animated with motion)
+      ===================================================================== */}
+      <main className="flex-1">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentRoute}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+          >
+            {currentRoute === '/' && (
+              <HomePage
+                onNavigate={handleNavigate}
+                onOpenConsultation={handleOpenConsultation}
+                portfolioItems={portfolioItems}
+                insightPosts={insightPosts}
+              />
+            )}
+
+            {(currentRoute === '/services' ||
+              currentRoute === '/services/dashboards' ||
+              currentRoute === '/services/bi-analytics' ||
+              currentRoute === '/services/consulting') && (
+              <ServicesPages
+                currentRoute={currentRoute}
+                onNavigate={handleNavigate}
+                onOpenConsultation={handleOpenConsultation}
+              />
+            )}
+
+            {currentRoute === '/demos' && (
+              <DemosPages
+                currentRoute={currentRoute}
+                onNavigate={handleNavigate}
+                onOpenConsultation={handleOpenConsultation}
+              />
+            )}
+
+            {(currentRoute === '/portfolio' ||
+              currentRoute === '/insights' ||
+              currentRoute === '/about' ||
+              currentRoute === '/contact' ||
+              currentRoute === '/privacy') && (
+              <ContentPages
+                currentRoute={currentRoute}
+                onNavigate={handleNavigate}
+                onOpenConsultation={handleOpenConsultation}
+                portfolioItems={portfolioItems}
+                insightPosts={insightPosts}
+                siteContactInfo={siteContactInfo}
+              />
+            )}
+
+            {(currentRoute === '/auth' || currentRoute === '/portal') && (
+              <PortalAndAuthPages
+                currentRoute={currentRoute}
+                onNavigate={handleNavigate}
+                authUser={authUser}
+                onAuthChange={setAuthUser}
+              />
+            )}
+
+            {currentRoute === '/admin' && (
+              <AdminPage
+                onNavigate={handleNavigate}
+                authUser={authUser}
+                onAuthChange={setAuthUser}
+                onRefreshPublicData={refreshPublicData}
+              />
+            )}
+
+            {currentRoute === '/design-system' &&
+              (authUser?.role === 'admin' ? (
+                <DesignSystemAndSitemapPage onNavigate={handleNavigate} />
+              ) : (
+                <HomePage
+                  onNavigate={handleNavigate}
+                  onOpenConsultation={handleOpenConsultation}
+                  portfolioItems={portfolioItems}
+                  insightPosts={insightPosts}
+                />
+              ))}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      {/* =====================================================================
+          SECTION 10 — FOOTER (Deep Navy #062B4D — Updated Copy & Links)
+      ===================================================================== */}
+      <footer className="bg-[#062B4D] text-white border-t border-[#087A9D]/30 mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 pb-12 border-b border-white/15">
+            {/* Col 1: Brand Slogan & Result-Driven Intro */}
+            <div className="lg:col-span-4 space-y-3">
+              <p className="text-sm font-bold text-[#3CDDDD]">
+                همراه کسب‌وکار شما، با نگاهی تحلیلی
+              </p>
+              <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
+                بینش، شریک تحلیلی و مهندسی کسب‌وکار شماست. ما داده‌های خام و پراکنده فروش، مالی و انبار را به داشبوردهای مدیریتی دقیق (Power BI و وب‌اپلیکیشن‌های اختصاصی) تبدیل می‌کنیم تا مغایرت‌ها را در نطفه کشف کنید و بر اساس واقعیت‌های عددی تصمیم بگیرید.
+              </p>
+            </div>
+
+            {/* Col 2: Main & Content Pages (Including About, Insights, Contact) */}
+            <div className="lg:col-span-2 space-y-3">
+              <h3 className="text-xs font-bold text-[#3CDDDD]">دسترسی سریع</h3>
+              <ul className="space-y-2 text-xs text-white/80">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    خانه
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/services')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    خدمات
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/demos')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    دموهای تعاملی
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/portfolio')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    نمونه‌کارها
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/insights')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    بینش‌نامه
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/about')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    درباره بینش
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/contact')}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    تماس با بینش
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 3: Services Links */}
+            <div className="lg:col-span-3 space-y-3">
+              <h3 className="text-xs font-bold text-[#3CDDDD]">خدمات تخصصی بینش</h3>
+              <ul className="space-y-2 text-xs text-white/80">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/services/dashboards')}
+                    className="hover:text-white cursor-pointer text-right"
+                  >
+                    طراحی و توسعه داشبوردهای مدیریتی
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/services/bi-analytics')}
+                    className="hover:text-white cursor-pointer text-right"
+                  >
+                    تحلیل و پایش مستمر کسب‌وکار
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/services/consulting')}
+                    className="hover:text-white cursor-pointer text-right"
+                  >
+                    مشاوره و کوچینگ کسب‌وکار
+                  </button>
+                </li>
+                <li className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/demos')}
+                    className="text-[#3CDDDD] hover:underline cursor-pointer text-right"
+                  >
+                    • تجربه زنده دموی وب‌اپلیکیشن و Power BI
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 4: Portal & Verified Contact */}
+            <div className="lg:col-span-3 space-y-3">
+              <h3 className="text-xs font-bold text-[#3CDDDD]">فضای کاربری و ارتباط</h3>
+              <div className="space-y-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('/portal')}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-right flex items-center justify-between cursor-pointer"
+                >
+                  <span>فضای اختصاصی همکاری شما با بینش</span>
+                  <ShieldCheck className="w-4 h-4 text-[#3CDDDD] shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenConsultation()}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-[#08A9C5] hover:bg-[#3CDDDD] text-[#062B4D] text-center font-bold transition-colors cursor-pointer"
+                >
+                  جلسه رایگان عیب‌یابی داده
+                </button>
+              </div>
+              {hasAnyContactInfo && (
+                <div className="pt-2 text-xs text-white/75 space-y-1.5 leading-relaxed">
+                  {contactInfo.phone && (
+                    <div>
+                      شماره تماس:{' '}
+                      <a
+                        href={`tel:${contactInfo.phone}`}
+                        className="font-mono-num hover:text-white"
+                      >
+                        {contactInfo.phone}
+                      </a>
+                    </div>
+                  )}
+                  {contactInfo.email && (
+                    <div>
+                      ایمیل:{' '}
+                      <a
+                        href={`mailto:${contactInfo.email}`}
+                        className="font-mono-num hover:text-white"
+                      >
+                        {contactInfo.email}
+                      </a>
+                    </div>
+                  )}
+                  {contactInfo.address && <div>آدرس: {contactInfo.address}</div>}
+                  {contactInfo.workingHours && (
+                    <div>ساعات پاسخ‌گویی: {contactInfo.workingHours}</div>
+                  )}
+                  {contactInfo.linkedin && <div>LinkedIn: {contactInfo.linkedin}</div>}
+                  {contactInfo.telegram && <div>Telegram: {contactInfo.telegram}</div>}
+                  {contactInfo.otherSocial && <div>{contactInfo.otherSocial}</div>}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/60">
+            <div>
+              © تمامی حقوق مادی و معنوی این وب‌سایت متعلق به برند بینش (Binesh) است.
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                onClick={() => handleNavigate('/privacy')}
+                className="hover:text-white cursor-pointer"
+              >
+                حریم خصوصی و محرمانگی اطلاعات
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/contact')}
+                className="hover:text-white cursor-pointer"
+              >
+                تماس با بینش
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => handleNavigate('/auth')}
+                className="hover:text-white cursor-pointer"
+              >
+                ورود به حساب بینش
+              </button>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* Global Consultation Request Modal */}
+      <ConsultationModal
+        isOpen={consultationModalOpen}
+        onClose={() => setConsultationModalOpen(false)}
+        defaultService={consultationServiceTitle}
+      />
+    </div>
+  );
+}
