@@ -9,18 +9,22 @@ import {
   CheckCircle2,
   AlertTriangle,
   Wrench,
-  TrendingUp
+  TrendingUp,
+  Layers
 } from 'lucide-react';
 import {
   RoutePath,
   SERVICE_CATEGORIES,
   COLLABORATION_STEPS,
   PORTFOLIO_PLACEHOLDERS,
-  INSIGHTS_PLACEHOLDERS,
   PortfolioPlaceholderItem,
-  InsightPlaceholderItem
+  InsightPlaceholderItem,
+  UNIFIED_CTA_LABEL,
+  isPublicInsightPost
 } from '../data/bineshData';
+import { SOLUTIONS_DATA, getPortfolioRoute } from '../data/solutionsData';
 import { Mascot } from '../components/BrandComponents';
+import { NavLink } from '../components/NavLink';
 
 interface HomePageProps {
   onNavigate: (route: RoutePath) => void;
@@ -33,8 +37,9 @@ export const HomePage: React.FC<HomePageProps> = ({
   onNavigate,
   onOpenConsultation,
   portfolioItems = PORTFOLIO_PLACEHOLDERS,
-  insightPosts = INSIGHTS_PLACEHOLDERS
+  insightPosts = []
 }) => {
+  const publishedInsights = insightPosts.filter(isPublicInsightPost);
   const [activeServiceCard, setActiveServiceCard] = useState<string>('dashboards');
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
 
@@ -42,7 +47,6 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [monthlyTransactions, setMonthlyTransactions] = useState<number>(3500);
   const [weeklyExcelHours, setWeeklyExcelHours] = useState<number>(8);
 
-  // Calculated annual hours wasted on manual reporting & reconciliation
   const baseAnnualHours = weeklyExcelHours * 52;
   const complexityOverheadHours = Math.round((monthlyTransactions / 1000) * 18);
   const totalWastedHoursPerYear = baseAnnualHours + complexityOverheadHours;
@@ -67,7 +71,6 @@ export const HomePage: React.FC<HomePageProps> = ({
           SECTION 01 — DARK ENGINEERED HERO SECTION + DATA VALUE CALCULATOR
       ===================================================================== */}
       <section className="relative pt-10 md:pt-16 pb-16 border-b border-[#087A9D]/30 bg-[#062B4D] bg-binesh-blueprint text-white overflow-hidden">
-        {/* Ambient Glow */}
         <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#3CDDDD]/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-[#08A9C5]/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -78,7 +81,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs text-[#3CDDDD]">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>اتصال زنده و پایش بلادرنگ داده‌های کسب‌وکار</span>
+                  <span>اتصال مستقیم و به‌روزرسانی لحظه‌ای داده‌های کسب‌وکار</span>
                 </div>
               </div>
 
@@ -90,7 +93,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 بدون به‌هم ریختن سیستم‌های فعلی، فایل‌های اکسل، نرم‌افزار حسابداری و دیتابیس‌های جزیره‌ای خود را به یک تصویر واحد، لحظه‌ای و بدون خطا تبدیل کنید.
               </p>
 
-              {/* Key Bullet Points for Fast Scanning */}
+              {/* Key Bullet Points */}
               <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs text-white/90">
                 <li className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5">
                   <CheckCircle2 className="w-4 h-4 text-[#3CDDDD] shrink-0" />
@@ -107,54 +110,53 @@ export const HomePage: React.FC<HomePageProps> = ({
               </ul>
 
               {/* Primary Action Controls */}
-              <div className="pt-2 flex flex-wrap items-center gap-3.5">
+              <div className="pt-2 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-3.5">
                 <button
                   type="button"
                   onClick={() => onOpenConsultation()}
-                  className="px-6 py-3.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-sm font-bold hover:bg-[#3CDDDD] active:scale-[0.99] transition-all inline-flex items-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer shadow-lg"
+                  className="px-6 py-3.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-sm font-bold hover:bg-[#3CDDDD] active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer shadow-lg w-full sm:w-auto"
                 >
-                  <span>جلسه رایگان عیب‌یابی داده</span>
+                  <span>{UNIFIED_CTA_LABEL}</span>
                   <ArrowLeft className="w-4 h-4" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/demos')}
-                  className="px-6 py-3.5 rounded-xl bg-white/10 text-white border border-white/20 hover:border-[#3CDDDD] hover:bg-white/15 text-sm font-medium transition-all inline-flex items-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer"
+                <NavLink
+                  href="/demos"
+                  onNavigate={onNavigate}
+                  className="px-6 py-3.5 rounded-xl bg-white/10 text-white border border-white/20 hover:border-[#3CDDDD] hover:bg-white/15 text-sm font-medium transition-all inline-flex items-center justify-center gap-2.5 whitespace-nowrap shrink-0 w-full sm:w-auto"
                 >
                   <BarChart3 className="w-4 h-4 text-[#3CDDDD]" />
                   <span>تجربه دموهای تعاملی زنده</span>
-                </button>
+                </NavLink>
 
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/services')}
-                  className="px-4 py-3.5 rounded-xl text-[#3CDDDD] hover:text-white text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                <NavLink
+                  href="/services"
+                  onNavigate={onNavigate}
+                  className="px-4 py-3 sm:py-3.5 rounded-xl text-[#3CDDDD] hover:text-white text-sm font-medium transition-colors whitespace-nowrap shrink-0 text-center"
                 >
                   مشاهده خدمات ←
-                </button>
+                </NavLink>
               </div>
             </div>
 
             {/* Left Column: Glassmorphism Interactive Data Value Calculator + Mascot */}
             <div className="lg:col-span-5 space-y-5">
-              {/* Interactive Mini-Widget: Data Value & Time Saved Estimator */}
-              <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5">
-                <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-white/10">
+              <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-3.5 border-b border-white/10">
                   <div className="flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-[#3CDDDD]" />
-                    <h2 className="text-sm font-bold text-white">
+                    <Sliders className="w-4 h-4 text-[#3CDDDD] shrink-0" />
+                    <h2 className="text-xs sm:text-sm font-bold text-white">
                       ماشین‌حساب تخمین زمان تلف‌شده گزارش‌گیری
                     </h2>
                   </div>
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-md bg-[#08A9C5]/20 text-[#3CDDDD] font-mono-num">
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-md bg-[#08A9C5]/20 text-[#3CDDDD] font-mono-num shrink-0">
                     محاسبه آنی
                   </span>
                 </div>
 
-                {/* Slider 1: Monthly Invoices/Transactions */}
+                {/* Slider 1 */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
                     <label htmlFor="slider-tx" className="text-white/85">
                       ۱. تعداد فاکتور یا تراکنش ماهانه شرکت:
                     </label>
@@ -179,7 +181,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
 
-                {/* Slider 2: Weekly Excel Hours */}
+                {/* Slider 2 */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <label htmlFor="slider-hours" className="text-white/85">
@@ -237,7 +239,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   }
                   className="w-full py-3 rounded-xl bg-[#08A9C5] hover:bg-[#3CDDDD] text-[#062B4D] font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <span>درخواست خودکارسازی این گزارش‌ها (جلسه رایگان)</span>
+                  <span>{UNIFIED_CTA_LABEL}</span>
                   <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -247,7 +249,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* =====================================================================
-          SECTION 02 — انتخاب مسیر همکاری (H02)
+          SECTION 02 — سه راهکار مهندسی بینش (Semantic <a href> Service Cards)
       ===================================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
@@ -259,17 +261,26 @@ export const HomePage: React.FC<HomePageProps> = ({
               بر اساس چالش امروز شرکت خود، مسیر مناسب را انتخاب کنید:
             </p>
           </div>
+          <NavLink
+            href="/services"
+            onNavigate={onNavigate}
+            className="text-xs font-bold text-[#087A9D] hover:text-[#062B4D] inline-flex items-center gap-1.5 shrink-0"
+          >
+            <span>مرور کامل خدمات بینش</span>
+            <ArrowLeft className="w-4 h-4" />
+          </NavLink>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {SERVICE_CATEGORIES.map((service) => {
             const isSelected = activeServiceCard === service.id;
             return (
-              <div
+              <NavLink
                 key={service.id}
+                href={service.route}
+                onNavigate={onNavigate}
                 onMouseEnter={() => setActiveServiceCard(service.id)}
-                onClick={() => onNavigate('/services')}
-                className={`group rounded-2xl bg-white p-6 sm:p-7 border transition-all duration-200 flex flex-col justify-between cursor-pointer ${
+                className={`group rounded-2xl bg-white p-6 sm:p-7 border transition-all duration-200 flex flex-col justify-between ${
                   isSelected
                     ? 'border-[#08A9C5] shadow-md -translate-y-0.5'
                     : 'border-[#E3EBF0] hover:border-[#08A9C5]/60 hover:shadow-xs'
@@ -307,14 +318,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <ArrowLeft className="w-4 h-4" />
                   </span>
                 </div>
-              </div>
+              </NavLink>
             );
           })}
         </div>
       </section>
 
       {/* =====================================================================
-          SECTION 03 — دموهای تعاملی با استایل شیشه‌ای (Glassmorphism & Live Badge)
+          SECTION 03 — دموهای تعاملی با استایل شیشه‌ای
       ===================================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="rounded-3xl bg-[#062B4D] bg-binesh-blueprint text-white p-6 sm:p-10 relative overflow-hidden border border-[#087A9D]/30">
@@ -322,7 +333,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs text-[#3CDDDD]">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>اتصال زنده و پایش بلادرنگ داده‌های کسب‌وکار</span>
+                <span>اتصال مستقیم و به‌روزرسانی لحظه‌ای داده‌های کسب‌وکار</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold text-white">
                 قبل از تصمیم‌گیری، خروجی کار ما را زنده لمس کنید
@@ -331,18 +342,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                 در صفحه دموها، می‌توانید هر دو محیط وب‌اپلیکیشن اختصاصی و داشبورد Power BI را مستقیماً داخل مرورگر خود فیلتر و بررسی کنید.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('/demos')}
-              className="px-5 py-2.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-xs font-bold hover:bg-[#3CDDDD] inline-flex items-center gap-1.5 cursor-pointer self-start md:self-auto shrink-0"
+            <NavLink
+              href="/demos"
+              onNavigate={onNavigate}
+              className="px-5 py-2.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-xs font-bold hover:bg-[#3CDDDD] inline-flex items-center gap-1.5 self-start md:self-auto shrink-0"
             >
               <span>ورود به اتاق دموهای زنده</span>
               <ArrowLeft className="w-4 h-4" />
-            </button>
+            </NavLink>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
-            {/* Demo 01 — Web Application (Glassmorphic Card) */}
+            {/* Demo 01 */}
             <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between gap-2 pb-4 mb-4 border-b border-white/10">
@@ -362,21 +373,21 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </ul>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between gap-4">
+              <div className="mt-6 pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="font-mono-num text-xs text-[#3CDDDD]">۱۶۴ شعبه · ۳۱ استان</span>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/demos')}
-                  className="px-5 py-2.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-xs font-bold hover:bg-[#3CDDDD] transition-colors inline-flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                <NavLink
+                  href="/demos"
+                  onNavigate={onNavigate}
+                  className="px-5 py-2.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-xs font-bold hover:bg-[#3CDDDD] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 w-full sm:w-auto"
                 >
                   <span>مشاهده زنده دموی وب‌اپلیکیشن</span>
                   <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
+                </NavLink>
               </div>
             </div>
 
-            {/* Demo 02 — Power BI (Glassmorphic Card) */}
-            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col justify-between">
+            {/* Demo 02 */}
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between gap-2 pb-4 mb-4 border-b border-white/10">
                   <span className="font-mono-num text-xs text-[#3CDDDD] font-bold dir-ltr">
@@ -395,16 +406,16 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </ul>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between gap-4">
+              <div className="mt-6 pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="font-mono-num text-xs text-[#3CDDDD]">۴ تب تخصصی مالی</span>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/demos')}
-                  className="px-5 py-2.5 rounded-xl bg-white text-[#062B4D] text-xs font-bold hover:bg-[#3CDDDD] transition-colors inline-flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                <NavLink
+                  href="/demos"
+                  onNavigate={onNavigate}
+                  className="px-5 py-2.5 rounded-xl bg-white text-[#062B4D] text-xs font-bold hover:bg-[#3CDDDD] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 w-full sm:w-auto"
                 >
                   <span>مشاهده زنده دموی Power BI</span>
                   <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
+                </NavLink>
               </div>
             </div>
           </div>
@@ -412,7 +423,57 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* =====================================================================
-          SECTION 04 — مسیر ۴ گام همکاری با بینش (H05 Linear Roadmap)
+          SECTION 04 — راهکارهای تخصصی نرم‌افزارهای ایرانی و صنایع (6 Solutions)
+      ===================================================================== */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <span className="text-xs font-bold text-[#087A9D] inline-flex items-center gap-1.5 mb-1">
+              <Layers className="w-4 h-4" />
+              <span>راهکارهای یکپارچه‌سازی و تخصصی صنایع</span>
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#062B4D]">
+              اتصال مستقیم به سپیدار، هلو و راهکارهای تخصصی پخش، بازرگانی و مالی
+            </h2>
+          </div>
+          <NavLink
+            href="/solutions"
+            onNavigate={onNavigate}
+            className="text-xs font-bold text-[#087A9D] hover:text-[#062B4D] inline-flex items-center gap-1.5 self-start md:self-auto shrink-0"
+          >
+            <span>مشاهده همه راهکارها</span>
+            <ArrowLeft className="w-4 h-4" />
+          </NavLink>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {SOLUTIONS_DATA.map((sol) => (
+            <NavLink
+              key={sol.route}
+              href={sol.route}
+              onNavigate={onNavigate}
+              className="group rounded-2xl bg-white border border-[#E3EBF0] hover:border-[#08A9C5] hover:shadow-xs p-5 flex flex-col justify-between gap-4 transition-all"
+            >
+              <div className="space-y-2">
+                <span className="inline-block px-2.5 py-0.5 rounded-md bg-[#EAF7F9] text-[#087A9D] text-[11px] font-bold">
+                  {sol.badge}
+                </span>
+                <h3 className="text-base font-bold text-[#062B4D] group-hover:text-[#087A9D] transition-colors">
+                  {sol.shortTitle}
+                </h3>
+                <p className="text-xs text-[#435466] leading-relaxed line-clamp-2">{sol.lead}</p>
+              </div>
+              <div className="pt-3 border-t border-[#E3EBF0] flex items-center justify-between text-xs font-bold text-[#087A9D]">
+                <span>بررسی جزئیات راهکار</span>
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+              </div>
+            </NavLink>
+          ))}
+        </div>
+      </section>
+
+      {/* =====================================================================
+          SECTION 05 — مسیر ۴ گام همکاری با بینش
       ===================================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="rounded-2xl bg-white border border-[#E3EBF0] p-6 sm:p-10">
@@ -430,11 +491,11 @@ export const HomePage: React.FC<HomePageProps> = ({
               onClick={() => onOpenConsultation()}
               className="px-4 py-2 rounded-xl bg-[#EAF7F9] text-[#062B4D] hover:bg-[#08A9C5] hover:text-white text-xs font-bold transition-colors cursor-pointer self-start md:self-auto"
             >
-              شروع از گام اول (۱۵ دقیقه رایگان) ←
+              {UNIFIED_CTA_LABEL} ←
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-5 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 relative">
             {COLLABORATION_STEPS.map((item, idx) => {
               const isActive = activeStepIndex === idx;
               return (
@@ -456,9 +517,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         {item.subtitle}
                       </span>
                     </div>
-                    <h3 className="text-base font-bold text-[#062B4D] mb-2">
-                      {item.title}
-                    </h3>
+                    <h3 className="text-base font-bold text-[#062B4D] mb-2">{item.title}</h3>
                     <p className="text-xs sm:text-sm text-[#435466] leading-relaxed">
                       {item.description}
                     </p>
@@ -471,7 +530,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* =====================================================================
-          SECTION 05 — نمونه‌کارها با قالب ۳ مرحله‌ای (چالش / راهکار / نتیجه)
+          SECTION 06 — نمونه‌کارها (Semantic <a href="/portfolio/..."> Cards)
       ===================================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -483,30 +542,31 @@ export const HomePage: React.FC<HomePageProps> = ({
               نمونه‌کارها و دستاوردهای مهندسی داده
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('/portfolio')}
-            className="text-xs font-bold text-[#087A9D] hover:text-[#062B4D] inline-flex items-center gap-1.5 cursor-pointer self-start md:self-auto shrink-0"
+          <NavLink
+            href="/portfolio"
+            onNavigate={onNavigate}
+            className="text-xs font-bold text-[#087A9D] hover:text-[#062B4D] inline-flex items-center gap-1.5 self-start md:self-auto shrink-0"
           >
             <span>مشاهده جزئیات همه نمونه‌کارها</span>
             <ArrowLeft className="w-4 h-4" />
-          </button>
+          </NavLink>
         </div>
 
-        {/* 4 Published Portfolio Cards with 3-Stage Format */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {portfolioItems.map((item) => (
-            <div
+            <NavLink
               key={item.id}
-              onClick={() => onNavigate('/portfolio')}
-              className="group rounded-2xl bg-white border border-[#E3EBF0] hover:border-[#08A9C5] transition-all overflow-hidden flex flex-col justify-between cursor-pointer shadow-2xs"
+              href={getPortfolioRoute(item)}
+              onNavigate={onNavigate}
+              className="group rounded-2xl bg-white border border-[#E3EBF0] hover:border-[#08A9C5] transition-all overflow-hidden flex flex-col justify-between shadow-2xs"
             >
               <div>
                 <div className="relative aspect-16/9 bg-[#062B4D] overflow-hidden border-b border-[#E3EBF0]">
                   <img
                     src={item.image}
-                    alt={item.title}
+                    alt={`تصویر داشبورد مدیریتی پروژه ${item.title} — ${item.serviceType}`}
                     loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                   />
                 </div>
@@ -558,71 +618,72 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span>بررسی کامل مطالعه موردی و تصاویر داشبورد</span>
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
               </div>
-            </div>
+            </NavLink>
           ))}
         </div>
       </section>
 
       {/* =====================================================================
-          SECTION 06 — بینش‌نامه (H08 + Reader Mascot)
+          SECTION 07 — بینش‌نامه (Only rendered when published non-draft articles exist)
       ===================================================================== */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        <div className="rounded-2xl bg-white border border-[#E3EBF0] p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          <div className="lg:col-span-8 space-y-3">
-            <h2 className="text-2xl sm:text-3xl font-bold text-[#062B4D]">
-              بینش‌نامه؛ راهنمای تصمیم‌گیری داده‌محور مدیران
-            </h2>
-            <p className="text-sm text-[#435466] max-w-2xl leading-relaxed">
-              یادداشت‌های کاربردی و کوتاه درباره طراحی داشبورد، تعریف KPI و گذار از اکسل به سیستم‌های خودکار هوش تجاری.
-            </p>
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => onNavigate('/insights')}
-                className="text-xs font-bold text-[#087A9D] hover:text-[#062B4D] inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>مشاهده همه مطالب بینش‌نامه</span>
-                <ArrowLeft className="w-4 h-4" />
-              </button>
+      {publishedInsights.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="rounded-2xl bg-white border border-[#E3EBF0] p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-8 space-y-3">
+              <h2 className="text-2xl sm:text-3xl font-bold text-[#062B4D]">
+                بینش‌نامه؛ راهنمای تصمیم‌گیری داده‌محور مدیران
+              </h2>
+              <p className="text-sm text-[#435466] max-w-2xl leading-relaxed">
+                یادداشت‌های کاربردی و کوتاه درباره طراحی داشبورد، تعریف KPI و گذار از اکسل به سیستم‌های خودکار هوش تجاری.
+              </p>
+              <div className="pt-1">
+                <NavLink
+                  href="/insights"
+                  onNavigate={onNavigate}
+                  className="text-xs font-bold text-[#087A9D] hover:text-[#062B4D] inline-flex items-center gap-1.5"
+                >
+                  <span>مشاهده همه مطالب بینش‌نامه</span>
+                  <ArrowLeft className="w-4 h-4" />
+                </NavLink>
+              </div>
+            </div>
+            <div className="lg:col-span-4">
+              <Mascot name="reader" className="mx-auto w-full max-w-[240px]" />
             </div>
           </div>
-          <div className="lg:col-span-4">
-            <Mascot name="reader" className="mx-auto w-full max-w-[240px]" />
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {insightPosts.map((post) => (
-            <div
-              key={post.id}
-              onClick={() => onNavigate('/insights')}
-              className="rounded-2xl bg-white border border-[#E3EBF0] hover:border-[#08A9C5] p-6 flex flex-col justify-between cursor-pointer transition-colors"
-            >
-              <div>
-                <div className="flex items-center justify-between text-xs text-[#64748B] pb-3 mb-4 border-b border-[#E3EBF0]">
-                  <span className="font-bold text-[#087A9D]">{post.category}</span>
-                  <span>{post.statusNote}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {publishedInsights.map((post) => (
+              <NavLink
+                key={post.id}
+                href="/insights"
+                onNavigate={onNavigate}
+                className="rounded-2xl bg-white border border-[#E3EBF0] hover:border-[#08A9C5] p-6 flex flex-col justify-between transition-colors"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-[#64748B] pb-3 mb-4 border-b border-[#E3EBF0]">
+                    <span className="font-bold text-[#087A9D]">{post.category}</span>
+                    <span>{post.statusNote}</span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-[#062B4D] leading-snug">{post.title}</h3>
+                  <p className="mt-2.5 text-xs text-[#435466] leading-relaxed line-clamp-3">
+                    {post.excerpt}
+                  </p>
                 </div>
 
-                <h3 className="text-base font-bold text-[#062B4D] leading-snug">
-                  {post.title}
-                </h3>
-                <p className="mt-2.5 text-xs text-[#435466] leading-relaxed line-clamp-3">
-                  {post.excerpt}
-                </p>
-              </div>
-
-              <div className="mt-5 pt-3.5 border-t border-[#E3EBF0] flex items-center justify-between text-xs text-[#087A9D] font-medium">
-                <span>مطالعه در بینش‌نامه</span>
-                <ArrowLeft className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+                <div className="mt-5 pt-3.5 border-t border-[#E3EBF0] flex items-center justify-between text-xs text-[#087A9D] font-medium">
+                  <span>مطالعه در بینش‌نامه</span>
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </div>
+              </NavLink>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* =====================================================================
-          SECTION 07 — دعوت به همکاری پایانی (H09 + Companion Mascot #5)
+          SECTION 08 — دعوت به همکاری پایانی
       ===================================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="rounded-3xl bg-[#062B4D] bg-binesh-blueprint text-white p-7 sm:p-12 border border-[#087A9D]/40 relative overflow-hidden">
@@ -630,34 +691,33 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="lg:col-span-8 space-y-5">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs text-[#3CDDDD]">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>جلسه ۱۵ دقیقه‌ای کشف نیاز — بدون هزینه و بدون نیاز به داده محرمانه</span>
+                <span>{UNIFIED_CTA_LABEL} — بدون نیاز به ارسال داده محرمانه</span>
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold leading-snug">
                 آماده‌اید گزارش‌های دستی را به داشبوردهای دقیق و لحظه‌ای تبدیل کنید؟
               </h2>
               <p className="text-sm sm:text-base text-white/80 leading-relaxed max-w-2xl">
-                در یک گفت‌وگوی کوتاه ۱۵ دقیقه‌ای، وضعیت فعلی گزارش‌های فروش، مالی و انبار شما را بررسی می‌کنیم و بهترین مسیر پیاده‌سازی را مشخص می‌سازیم.
+                در یک گفت‌وگوی ۳۰ دقیقه‌ای رایگان، وضعیت فعلی گزارش‌های فروش، مالی و انبار شما را بررسی می‌کنیم و بهترین مسیر پیاده‌سازی را مشخص می‌سازیم.
               </p>
 
-              <div className="pt-2 flex flex-wrap items-center gap-4">
+              <div className="pt-2 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
                 <button
                   type="button"
                   onClick={() => onOpenConsultation()}
-                  className="px-6 py-3.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-sm font-bold hover:bg-[#3CDDDD] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-6 py-3.5 rounded-xl bg-[#08A9C5] text-[#062B4D] text-sm font-bold hover:bg-[#3CDDDD] transition-colors whitespace-nowrap shrink-0 cursor-pointer text-center w-full sm:w-auto"
                 >
-                  جلسه رایگان عیب‌یابی داده
+                  {UNIFIED_CTA_LABEL}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/contact')}
-                  className="px-6 py-3.5 rounded-xl bg-white/10 text-white hover:bg-white/20 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                <NavLink
+                  href="/contact"
+                  onNavigate={onNavigate}
+                  className="px-6 py-3.5 rounded-xl bg-white/10 text-white hover:bg-white/20 text-sm font-medium transition-colors whitespace-nowrap shrink-0 text-center w-full sm:w-auto"
                 >
                   تماس مستقیم با بینش
-                </button>
+                </NavLink>
               </div>
             </div>
 
-            {/* Companion Mascot (#5) on navy background */}
             <div className="lg:col-span-4">
               <Mascot
                 name="companion"

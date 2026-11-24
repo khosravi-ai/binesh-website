@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Bell,
   Volume2,
@@ -6,19 +6,24 @@ import {
   Download,
   Search,
   Trash2,
-  Plus,
   Edit3,
   CheckCircle2,
   RefreshCw,
   Send,
-  Users,
   Briefcase,
   BookOpen,
   Settings,
   Inbox,
   LogOut,
   ShieldCheck,
-  KeyRound
+  BarChart3,
+  Eye,
+  UserCheck,
+  Monitor,
+  Smartphone,
+  Tablet,
+  Globe,
+  Clock
 } from 'lucide-react';
 import { RoutePath } from '../data/bineshData';
 import { ContactInfo } from '../data/contactInfo';
@@ -32,7 +37,90 @@ interface AdminPageProps {
   onRefreshPublicData: () => void;
 }
 
-type AdminTab = 'consultations' | 'portfolio' | 'insights' | 'portal' | 'settings';
+type AdminTab = 'consultations' | 'analytics' | 'portfolio' | 'insights' | 'settings';
+
+interface AnalyticsSummary {
+  dbEngine: 'mysql' | 'sqlite';
+  rangeDays: number;
+  totalVisits: number;
+  totalUniqueVisitors: number;
+  periodVisits: number;
+  periodUniqueVisitors: number;
+  todayVisits: number;
+  todayUniqueVisitors: number;
+  last7DaysVisits: number;
+  topPages: { path: string; pageTitle: string; views: number; uniqueVisitors: number }[];
+  dailyTrend: { date: string; views: number; uniqueVisitors: number }[];
+  deviceBreakdown: { deviceType: string; count: number }[];
+  browserBreakdown: { browser: string; count: number }[];
+  topReferrers: { referrer: string; count: number }[];
+  recentVisits: {
+    id: number;
+    path: string;
+    pageTitle: string;
+    referrer: string;
+    deviceType: string;
+    browser: string;
+    visitedAt: string;
+  }[];
+}
+
+const ROUTE_PERSIAN_LABELS: Record<string, string> = {
+  '/': 'صفحه اصلی',
+  '/services': 'خدمات بینش',
+  '/services/dashboards': 'طراحی داشبوردهای مدیریتی',
+  '/services/bi-analytics': 'تحلیل و پایش مستمر',
+  '/services/consulting': 'مشاوره و کوچینگ کسب‌وکار',
+  '/solutions': 'راهکارهای هوش تجاری',
+  '/solutions/power-bi-sepidar': 'اتصال Power BI به سپیدار',
+  '/solutions/power-bi-holoo': 'اتصال Power BI به هلو',
+  '/solutions/distribution-sales': 'هوش تجاری پخش مویرگی',
+  '/solutions/trading-sales': 'هوش تجاری فروش بازرگانی',
+  '/solutions/finance': 'داشبورد مالی و نقدینگی',
+  '/solutions/shiraz': 'هوش تجاری در شیراز',
+  '/demos': 'دموهای تعاملی',
+  '/portfolio': 'نمونه‌کارها',
+  '/portfolio/kabino-wood': 'نمونه‌کار کابینو وود',
+  '/portfolio/paytakht-office': 'نمونه‌کار تجهیزات اداری پایتخت',
+  '/portfolio/takapoo': 'نمونه‌کار تکاپو',
+  '/portfolio/arya-pakhsh': 'نمونه‌کار آریا پخش',
+  '/insights': 'بینش‌نامه (مقالات)',
+  '/about': 'درباره بینش',
+  '/contact': 'تماس با بینش',
+  '/privacy': 'حریم خصوصی'
+};
+
+function formatIranDateTime(rawUtc: string): string {
+  const trimmed = String(rawUtc || '').trim();
+  if (!trimmed) return '—';
+  // Normalize SQLite/MySQL space-separated UTC strings (YYYY-MM-DD HH:MM:SS) to ISO UTC
+  const normalized =
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(trimmed)
+      ? `${trimmed.replace(' ', 'T')}Z`
+      : trimmed;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  try {
+    return new Intl.DateTimeFormat('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(parsed);
+  } catch {
+    return trimmed;
+  }
+}
+
+const DEVICE_PERSIAN_LABELS: Record<string, string> = {
+  desktop: 'دسکتاپ',
+  mobile: 'موبایل',
+  tablet: 'تبلت'
+};
 
 const CONSULTATION_STATUSES: { value: string; label: string; badgeClass: string }[] = [
   { value: 'new', label: 'جدید (بررسی‌نشده)', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300' },
@@ -83,8 +171,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Admin Login Form (if not logged in as admin)
-  const [loginId, setLoginId] = useState('09164006698');
-  const [loginPass, setLoginPass] = useState('Binesh@1404');
+  const [loginId, setLoginId] = useState('');
+  const [loginPass, setLoginPass] = useState('');
   const [loginErr, setLoginErr] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -95,14 +183,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [portfolio, setPortfolio] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [insights, setInsights] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [organizations, setOrganizations] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [users, setUsers] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [portalItems, setPortalItems] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [analysisRequests, setAnalysisRequests] = useState<any[]>([]);
+
+  // Internal Visitor Analytics State
+  const [analyticsDays, setAnalyticsDays] = useState<7 | 30 | 90>(30);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsSummary | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Consultations Filter
   const [statusFilter, setStatusFilter] = useState('all');
@@ -114,7 +199,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [pfClient, setPfClient] = useState('');
   const [pfIndustry, setPfIndustry] = useState('');
   const [pfService, setPfService] = useState('طراحی و توسعه داشبوردهای مدیریتی');
-  const [pfImage, setPfImage] = useState('/assets/portfolio/kabinowood.png');
+  const [pfImage, setPfImage] = useState('/assets/aistudio/Kabinowood_9a6089ec.webp');
   const [pfIntro, setPfIntro] = useState('');
   const [pfSolution, setPfSolution] = useState('');
   const [pfFeaturesTitle, setPfFeaturesTitle] = useState('امکانات و بخش‌های کلیدی داشبورد:');
@@ -134,36 +219,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [inSortOrder, setInSortOrder] = useState(1);
   const [inPublished, setInPublished] = useState(true);
 
-  // Portal Management State
-  const [newOrgName, setNewOrgName] = useState('');
-  const [newUserFullName, setNewUserFullName] = useState('');
-  const [newUserPhone, setNewUserPhone] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPass, setNewUserPass] = useState('');
-  const [newUserRole, setNewUserRole] = useState('manager');
-  const [newUserOrgId, setNewUserOrgId] = useState('org-1');
-
-  const [newItemOrgId, setNewItemOrgId] = useState('org-1');
-  const [newItemType, setNewItemType] = useState('dashboard');
-  const [newItemTitle, setNewItemTitle] = useState('');
-  const [newItemDesc, setNewItemDesc] = useState('');
-  const [newItemStatus, setNewItemStatus] = useState('منتشر شده');
-  const [newItemMeta, setNewItemMeta] = useState('به‌روزرسانی روزانه');
-  const [newItemLink, setNewItemLink] = useState('/demo-webapp.html');
-
   // Settings State
   const [contactForm, setContactForm] = useState<ContactInfo>({
     phone: '09164006698',
-    email: 'ad.binesh.ai@gmail.com',
+    email: 'info@bineshbi.ir',
     address: null,
     workingHours: 'شنبه تا چهارشنبه، ساعت ۹ تا ۱۷',
-    linkedin: null,
+    instagram: null,
     telegram: null,
+    bale: null,
+    linkedin: null,
     otherSocial: null
   });
   const [notifForm, setNotifForm] = useState({
     adminAlertPhone: '09164006698',
-    adminAlertEmail: 'ad.binesh.ai@gmail.com',
+    adminAlertEmail: 'info@bineshbi.ir',
     enableSoundAlert: true,
     smsProvider: 'none' as 'none' | 'kavenegar' | 'melipayamak',
     kavenegarApiKey: '',
@@ -188,7 +258,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }, 5000);
   };
 
-  const fetchAdminOverview = async () => {
+  const fetchAdminOverview = useCallback(async () => {
     setLoading(true);
     try {
       const res = await apiFetch('/api/admin/overview');
@@ -198,12 +268,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           setConsultations(data.consultations || []);
           setPortfolio(data.portfolio || []);
           setInsights(data.insights || []);
-          setOrganizations(data.organizations || []);
-          setUsers(data.users || []);
-          setPortalItems(data.portalItems || []);
-          setAnalysisRequests(data.analysisRequests || []);
           if (data.settings?.contactInfo) {
-            setContactForm(data.settings.contactInfo);
+            setContactForm({
+              phone: data.settings.contactInfo.phone ?? null,
+              email: data.settings.contactInfo.email ?? null,
+              address: data.settings.contactInfo.address ?? null,
+              workingHours: data.settings.contactInfo.workingHours ?? null,
+              instagram: data.settings.contactInfo.instagram ?? null,
+              telegram: data.settings.contactInfo.telegram ?? null,
+              bale: data.settings.contactInfo.bale ?? null,
+              linkedin: data.settings.contactInfo.linkedin ?? null,
+              otherSocial: data.settings.contactInfo.otherSocial ?? null
+            });
           }
           if (data.settings?.notificationSettings) {
             setNotifForm(data.settings.notificationSettings);
@@ -221,13 +297,36 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchAnalytics = useCallback(async (days: 7 | 30 | 90) => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await apiFetch(`/api/admin/analytics?days=${days}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.analytics) {
+          setAnalyticsData(data.analytics);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (authUser?.role === 'admin') {
       fetchAdminOverview();
     }
-  }, [authUser?.id, authUser?.role]);
+  }, [authUser?.id, authUser?.role, fetchAdminOverview]);
+
+  useEffect(() => {
+    if (authUser?.role === 'admin') {
+      fetchAnalytics(analyticsDays);
+    }
+  }, [authUser?.id, authUser?.role, analyticsDays, fetchAnalytics]);
 
   // Live Polling for Instant Consultation Request Alerts
   useEffect(() => {
@@ -345,7 +444,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       clientName: pfClient.trim() || pfTitle.trim(),
       industry: pfIndustry.trim(),
       serviceType: pfService.trim(),
-      image: pfImage.trim() || '/assets/portfolio/kabinowood.png',
+      image: pfImage.trim() || '/assets/aistudio/Kabinowood_9a6089ec.webp',
       intro: pfIntro
         .split('\n')
         .map((s) => s.trim())
@@ -471,7 +570,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </span>
             <h1 className="text-xl font-bold text-[#062B4D]">ورود مدیر سیستم</h1>
             <p className="text-xs text-[#435466]">
-              برای مدیریت درخواست‌های مشاوره، نمونه‌کارها، بینش‌نامه و پورتال مشتریان وارد شوید.
+              برای مدیریت درخواست‌های مشاوره، آمار بازدید داخلی، نمونه‌کارها و محتوای سایت وارد شوید.
             </p>
           </div>
 
@@ -512,16 +611,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               {loginLoading ? 'در حال ورود...' : 'ورود به پنل مدیریت'}
             </button>
           </form>
-
-          <div className="p-3.5 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] text-[11px] text-[#435466] space-y-1">
-            <div className="font-bold text-[#062B4D] flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-[#08A9C5]" />
-              <span>مشخصات پیش‌فرض مدیر:</span>
-            </div>
-            <div className="font-mono-num dir-ltr text-left">
-              User: 09164006698 | Pass: Binesh@1404
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -558,7 +647,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <span>پنل مدیریت یکپارچه بینش (متصل به پایگاه داده رابطه‌ای)</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold">
-            مدیریت درخواست‌ها، محتوا و پورتال مشتریان
+            مدیریت درخواست‌ها، آمار بازدید داخلی و محتوای وب‌سایت
           </h1>
         </div>
 
@@ -597,11 +686,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
           <button
             type="button"
-            onClick={() => fetchAdminOverview()}
+            onClick={() => {
+              fetchAdminOverview();
+              fetchAnalytics(analyticsDays);
+            }}
             className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 cursor-pointer"
             title="به‌روزرسانی اطلاعات"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading || analyticsLoading ? 'animate-spin' : ''}`} />
           </button>
 
           <button
@@ -632,6 +724,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
         <button
           type="button"
+          onClick={() => setActiveTab('analytics')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
+            activeTab === 'analytics'
+              ? 'bg-[#062B4D] text-white'
+              : 'text-[#435466] hover:bg-[#F7FAFC]'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>
+            آمار بازدید داخلی
+            {analyticsData ? ` (${analyticsData.totalVisits.toLocaleString('fa-IR')})` : ''}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('portfolio')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
             activeTab === 'portfolio'
@@ -658,19 +766,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
         <button
           type="button"
-          onClick={() => setActiveTab('portal')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
-            activeTab === 'portal'
-              ? 'bg-[#062B4D] text-white'
-              : 'text-[#435466] hover:bg-[#F7FAFC]'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>پورتال مشتریان ({analysisRequests.length} درخواست تحلیل)</span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => setActiveTab('settings')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
             activeTab === 'settings'
@@ -679,7 +774,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           }`}
         >
           <Settings className="w-4 h-4" />
-          <span>اطلاعات تماس و تنظیمات پیامک/ایمیل</span>
+          <span>اطلاعات تماس، شبکه‌های اجتماعی و اطلاع‌رسانی</span>
         </button>
       </div>
 
@@ -717,22 +812,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="relative flex-1 md:flex-initial">
                 <Search className="w-4 h-4 text-[#64748B] absolute right-3 top-2.5" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="جست‌وجو نام، شماره، کد رهگیری..."
-                  className="pr-9 pl-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] focus:bg-white focus:outline-none w-56"
+                  className="pr-9 pl-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] focus:bg-white focus:outline-none w-full md:w-56"
                 />
               </div>
 
               <button
                 type="button"
                 onClick={handleDownloadCsv}
-                className="px-4 py-2 rounded-xl bg-[#087A9D] hover:bg-[#062B4D] text-white text-xs font-medium inline-flex items-center gap-2 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#087A9D] hover:bg-[#062B4D] text-white text-xs font-medium inline-flex items-center gap-2 cursor-pointer shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>خروجی اکسل / CSV</span>
@@ -1213,297 +1308,375 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       )}
 
       {/* =====================================================================
-          TAB 4: CLIENT PORTAL & ANALYSIS REQUESTS MANAGEMENT
+          TAB 4: INTERNAL VISITOR ANALYTICS (MySQL / SQLite Backed)
       ===================================================================== */}
-      {activeTab === 'portal' && (
+      {activeTab === 'analytics' && (
         <div className="space-y-6">
-          {/* Client Analysis Requests */}
-          <div className="bg-white rounded-2xl border border-[#E3EBF0] p-6 space-y-4">
-            <h2 className="text-base font-bold text-[#062B4D]">
-              درخواست‌های تحلیل ثبت‌شده توسط مشتریان در پورتال
-            </h2>
-            {analysisRequests.length === 0 ? (
-              <p className="text-xs text-[#64748B]">هنوز درخواست تحلیلی ثبت نشده است.</p>
-            ) : (
-              <div className="space-y-4">
-                {analysisRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className="p-4 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] space-y-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-sm font-bold text-[#062B4D]">{req.title}</h3>
-                        <span className="text-[11px] text-[#64748B]">
-                          ثبت‌کننده: {req.userName} · اولویت: {req.priority}
-                        </span>
-                      </div>
-                      <select
-                        value={req.status}
-                        onChange={async (e) => {
-                          await apiFetch(`/api/admin/analysis-requests/${req.id}`, {
-                            method: 'PATCH',
-                            body: JSON.stringify({
-                              status: e.target.value,
-                              adminResponse: req.adminResponse || ''
-                            })
-                          });
-                          showToast('وضعیت درخواست تحلیل مشتری به‌روز شد.');
-                          fetchAdminOverview();
-                        }}
-                        className="px-3 py-1.5 text-xs rounded-xl border border-[#E3EBF0] bg-white font-bold text-[#087A9D]"
-                      >
-                        <option value="در انتظار بررسی">در انتظار بررسی</option>
-                        <option value="در حال بررسی">در حال بررسی</option>
-                        <option value="نیازمند اطلاعات تکمیلی">نیازمند اطلاعات تکمیلی</option>
-                        <option value="تکمیل شده">تکمیل شده</option>
-                      </select>
-                    </div>
-                    {req.description && (
-                      <p className="text-xs text-[#435466]">{req.description}</p>
-                    )}
-                    <div>
-                      <label className="block text-[11px] text-[#64748B] mb-1">
-                        پاسخ مشاور / نتیجه بررسی (قابل مشاهده در پورتال مشتری):
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue={req.adminResponse || ''}
-                        onBlur={async (e) => {
-                          await apiFetch(`/api/admin/analysis-requests/${req.id}`, {
-                            method: 'PATCH',
-                            body: JSON.stringify({
-                              status: req.status,
-                              adminResponse: e.target.value
-                            })
-                          });
-                          showToast('پاسخ برای مشتری ذخیره شد.');
-                          fetchAdminOverview();
-                        }}
-                        placeholder="پاسخ تیم بینش را وارد کنید..."
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-white"
-                      />
-                    </div>
-                  </div>
-                ))}
+          {/* Header & Range Controls */}
+          <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-[#062B4D]">
+                  آمار بازدید داخلی وب‌سایت بینش
+                </h2>
+                {analyticsData && (
+                  <span className="px-2.5 py-0.5 rounded-md bg-[#EAF7F9] text-[#087A9D] text-[11px] font-bold">
+                    دیتابیس فعال: {analyticsData.dbEngine === 'mysql' ? 'MySQL' : 'SQLite'}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
+              <p className="text-xs text-[#64748B]">
+                گزارش مستقیم بازدید صفحات عمومی سایت ذخیره‌شده روی سرور (بدون وابستگی به سرویس‌های خارجی).
+              </p>
+            </div>
 
-          {/* Add Portal Item / User / Organization */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Add Dashboard/Report/Session to Organization */}
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!newItemTitle.trim()) return;
-                await apiFetch('/api/admin/portal-items', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    organizationId: newItemOrgId,
-                    itemType: newItemType,
-                    title: newItemTitle.trim(),
-                    description: newItemDesc.trim(),
-                    status: newItemStatus,
-                    metaText: newItemMeta,
-                    linkUrl: newItemLink
-                  })
-                });
-                setNewItemTitle('');
-                setNewItemDesc('');
-                showToast('آیتم جدید به پورتال سازمان اضافه شد.');
-                fetchAdminOverview();
-              }}
-              className="bg-white rounded-2xl border border-[#E3EBF0] p-6 space-y-3"
-            >
-              <h3 className="text-sm font-bold text-[#062B4D] flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-[#08A9C5]" />
-                <span>افزودن داشبورد، گزارش یا جلسه به پورتال سازمان</span>
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-[#64748B] mb-1">سازمان</label>
-                  <select
-                    value={newItemOrgId}
-                    onChange={(e) => setNewItemOrgId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                  >
-                    {organizations.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-[#64748B] mb-1">نوع آیتم</label>
-                  <select
-                    value={newItemType}
-                    onChange={(e) => setNewItemType(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                  >
-                    <option value="dashboard">داشبورد مدیریتی</option>
-                    <option value="report">گزارش تحلیلی</option>
-                    <option value="session">جلسه مشاوره</option>
-                    <option value="goal">هدف و شاخص (KPI)</option>
-                    <option value="file">فایل و مستندات</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-[#64748B] mb-1">عنوان *</label>
-                <input
-                  type="text"
-                  value={newItemTitle}
-                  onChange={(e) => setNewItemTitle(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-[#64748B] mb-1">توضیح کوتاه</label>
-                <input
-                  type="text"
-                  value={newItemDesc}
-                  onChange={(e) => setNewItemDesc(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-[#64748B] mb-1">برچسب زمان/متا</label>
-                  <input
-                    type="text"
-                    value={newItemMeta}
-                    onChange={(e) => setNewItemMeta(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-[#64748B] mb-1">لینک داشبورد/فایل</label>
-                  <input
-                    type="text"
-                    value={newItemLink}
-                    onChange={(e) => setNewItemLink(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#087A9D] text-white text-xs font-bold cursor-pointer"
-              >
-                ثبت در پورتال مشتری
-              </button>
-            </form>
-
-            {/* Create Client Organization & User */}
-            <div className="bg-white rounded-2xl border border-[#E3EBF0] p-6 space-y-5">
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!newOrgName.trim()) return;
-                  await apiFetch('/api/admin/organizations', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      name: newOrgName.trim(),
-                      contractModules: ['داشبوردهای مدیریتی', 'تحلیل و پایش مستمر']
-                    })
-                  });
-                  setNewOrgName('');
-                  showToast('سازمان جدید ایجاد شد.');
-                  fetchAdminOverview();
-                }}
-                className="space-y-2 pb-4 border-b border-[#E3EBF0]"
-              >
-                <h3 className="text-sm font-bold text-[#062B4D]">تعریف سازمان مشتری جدید</h3>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newOrgName}
-                    onChange={(e) => setNewOrgName(e.target.value)}
-                    placeholder="نام شرکت یا سازمان مشتری..."
-                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-xl bg-[#062B4D] text-white text-xs font-bold cursor-pointer"
-                  >
-                    افزودن سازمان
-                  </button>
-                </div>
-              </form>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!newUserFullName.trim() || !newUserPhone.trim() || !newUserPass.trim()) return;
-                  const res = await apiFetch('/api/admin/users', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      fullName: newUserFullName.trim(),
-                      phone: newUserPhone.trim(),
-                      email: newUserEmail.trim(),
-                      password: newUserPass,
-                      role: newUserRole,
-                      organizationId: newUserOrgId
-                    })
-                  });
-                  if (res.ok) {
-                    setNewUserFullName('');
-                    setNewUserPhone('');
-                    setNewUserEmail('');
-                    setNewUserPass('');
-                    showToast('حساب کاربری مشتری با موفقیت ایجاد شد.');
-                    fetchAdminOverview();
-                  }
-                }}
-                className="space-y-3"
-              >
-                <h3 className="text-sm font-bold text-[#062B4D]">تعریف کاربر جدید برای پورتال</h3>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <input
-                    type="text"
-                    value={newUserFullName}
-                    onChange={(e) => setNewUserFullName(e.target.value)}
-                    placeholder="نام و نام خانوادگی *"
-                    className="px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                  />
-                  <input
-                    type="text"
-                    value={newUserPhone}
-                    onChange={(e) => setNewUserPhone(e.target.value)}
-                    placeholder="شماره موبایل *"
-                    className="px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] font-mono-num dir-ltr text-left"
-                  />
-                  <input
-                    type="password"
-                    value={newUserPass}
-                    onChange={(e) => setNewUserPass(e.target.value)}
-                    placeholder="رمز عبور *"
-                    className="px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
-                  />
-                  <select
-                    value={newUserOrgId}
-                    onChange={(e) => setNewUserOrgId(e.target.value)}
-                    className="px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC]"
-                  >
-                    {organizations.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {([7, 30, 90] as const).map((days) => (
                 <button
-                  type="submit"
-                  className="w-full py-2 rounded-xl bg-[#087A9D] text-white text-xs font-bold cursor-pointer"
+                  key={days}
+                  type="button"
+                  onClick={() => setAnalyticsDays(days)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                    analyticsDays === days
+                      ? 'bg-[#062B4D] text-white'
+                      : 'bg-[#F7FAFC] text-[#435466] border border-[#E3EBF0] hover:bg-[#EAF7F9]'
+                  }`}
                 >
-                  ایجاد کاربر مشتری
+                  {days} روز اخیر
                 </button>
-              </form>
+              ))}
+              <button
+                type="button"
+                onClick={() => fetchAnalytics(analyticsDays)}
+                className="px-3 py-2 rounded-xl bg-[#EAF7F9] text-[#087A9D] hover:bg-[#08A9C5] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin' : ''}`} />
+                <span>به‌روزرسانی</span>
+              </button>
             </div>
           </div>
+
+          {!analyticsData ? (
+            <div className="bg-white rounded-2xl border border-[#E3EBF0] p-12 text-center text-sm text-[#64748B]">
+              {analyticsLoading ? 'در حال بارگذاری آمار بازدید...' : 'هنوز داده‌ای برای نمایش وجود ندارد.'}
+            </div>
+          ) : (
+            <>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-[#64748B]">
+                    <span>کل بازدیدها (همه زمان‌ها)</span>
+                    <Eye className="w-4 h-4 text-[#08A9C5]" />
+                  </div>
+                  <div className="text-2xl font-bold text-[#062B4D] font-mono-num">
+                    {analyticsData.totalVisits.toLocaleString('fa-IR')}
+                  </div>
+                  <div className="text-[11px] text-[#087A9D]">
+                    {analyticsData.periodVisits.toLocaleString('fa-IR')} بازدید در {analyticsData.rangeDays} روز اخیر
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-[#64748B]">
+                    <span>بازدیدهای امروز</span>
+                    <Clock className="w-4 h-4 text-[#08A9C5]" />
+                  </div>
+                  <div className="text-2xl font-bold text-[#062B4D] font-mono-num">
+                    {analyticsData.todayVisits.toLocaleString('fa-IR')}
+                  </div>
+                  <div className="text-[11px] text-[#087A9D]">
+                    {analyticsData.todayUniqueVisitors.toLocaleString('fa-IR')} بازدیدکننده یکتا امروز
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-[#64748B]">
+                    <span>بازدیدکنندگان یکتا ({analyticsData.rangeDays} روز)</span>
+                    <UserCheck className="w-4 h-4 text-[#08A9C5]" />
+                  </div>
+                  <div className="text-2xl font-bold text-[#062B4D] font-mono-num">
+                    {analyticsData.periodUniqueVisitors.toLocaleString('fa-IR')}
+                  </div>
+                  <div className="text-[11px] text-[#64748B]">
+                    مجموع کل: {analyticsData.totalUniqueVisitors.toLocaleString('fa-IR')} نفر یکتا
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-[#64748B]">
+                    <span>بازدید ۷ روز اخیر</span>
+                    <BarChart3 className="w-4 h-4 text-[#08A9C5]" />
+                  </div>
+                  <div className="text-2xl font-bold text-[#062B4D] font-mono-num">
+                    {analyticsData.last7DaysVisits.toLocaleString('fa-IR')}
+                  </div>
+                  <div className="text-[11px] text-[#64748B]">
+                    میانگین روزانه:{' '}
+                    {Math.round(analyticsData.last7DaysVisits / 7).toLocaleString('fa-IR')} بازدید
+                  </div>
+                </div>
+              </div>
+
+              {/* Daily Trend Chart */}
+              <div className="bg-white rounded-2xl border border-[#E3EBF0] p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-[#062B4D]">
+                    روند بازدید روزانه ({analyticsData.rangeDays} روز اخیر)
+                  </h3>
+                  <span className="text-[11px] text-[#64748B]">
+                    نشانگر روی هر ستون تعداد بازدید و کاربر یکتا را نشان می‌دهد
+                  </span>
+                </div>
+                {(() => {
+                  const maxViews = Math.max(
+                    1,
+                    ...analyticsData.dailyTrend.map((d) => d.views)
+                  );
+                  return (
+                    <div className="overflow-x-auto pb-2">
+                      <div className="min-w-[460px] h-48 flex items-end gap-1.5 pt-6 border-b border-[#E3EBF0]">
+                        {analyticsData.dailyTrend.map((day) => {
+                          const pct = Math.max(
+                            day.views > 0 ? 8 : 2,
+                            Math.round((day.views / maxViews) * 100)
+                          );
+                          return (
+                            <div
+                              key={day.date}
+                              className="flex-1 flex flex-col items-center justify-end h-full group relative"
+                              title={`${day.date} — ${day.views} بازدید (${day.uniqueVisitors} یکتا)`}
+                            >
+                              <div className="hidden group-hover:block absolute -top-7 whitespace-nowrap px-2 py-0.5 rounded bg-[#062B4D] text-white text-[10px] font-mono-num z-10">
+                                {day.date.slice(5)}: {day.views} ({day.uniqueVisitors} یکتا)
+                              </div>
+                              <div
+                                className={`w-full rounded-t-md transition-all ${
+                                  day.views > 0
+                                    ? 'bg-[#08A9C5] group-hover:bg-[#062B4D]'
+                                    : 'bg-[#E3EBF0]'
+                                }`}
+                                style={{ height: `${pct}%` }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="min-w-[460px] flex justify-between text-[10px] text-[#64748B] font-mono-num mt-2 dir-ltr">
+                        <span>{analyticsData.dailyTrend[0]?.date}</span>
+                        <span>
+                          {
+                            analyticsData.dailyTrend[
+                              Math.floor(analyticsData.dailyTrend.length / 2)
+                            ]?.date
+                          }
+                        </span>
+                        <span>
+                          {analyticsData.dailyTrend[analyticsData.dailyTrend.length - 1]?.date}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Top Pages + Device/Browser/Referrer Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Top Pages */}
+                <div className="lg:col-span-7 bg-white rounded-2xl border border-[#E3EBF0] p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-[#062B4D]">
+                    پربازدیدترین صفحات سایت ({analyticsData.rangeDays} روز اخیر)
+                  </h3>
+                  {analyticsData.topPages.length === 0 ? (
+                    <p className="text-xs text-[#64748B]">هنوز بازدیدی در این بازه ثبت نشده است.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {analyticsData.topPages.map((pg) => {
+                        const share =
+                          analyticsData.periodVisits > 0
+                            ? Math.round((pg.views / analyticsData.periodVisits) * 100)
+                            : 0;
+                        return (
+                          <div
+                            key={pg.path}
+                            className="p-3 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] space-y-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-bold text-[#062B4D] truncate">
+                                  {ROUTE_PERSIAN_LABELS[pg.path] || pg.pageTitle || pg.path}
+                                </span>
+                                <span className="font-mono-num text-[11px] text-[#64748B] dir-ltr">
+                                  {pg.path}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 font-mono-num shrink-0">
+                                <span className="font-bold text-[#087A9D]">
+                                  {pg.views.toLocaleString('fa-IR')} بازدید
+                                </span>
+                                <span className="text-[11px] text-[#64748B]">
+                                  ({pg.uniqueVisitors.toLocaleString('fa-IR')} یکتا)
+                                </span>
+                              </div>
+                            </div>
+                            <div className="w-full h-1.5 rounded-full bg-[#E3EBF0] overflow-hidden">
+                              <div
+                                className="h-full bg-[#08A9C5] rounded-full"
+                                style={{ width: `${Math.max(4, share)}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Devices, Browsers, Referrers */}
+                <div className="lg:col-span-5 space-y-6">
+                  {/* Devices */}
+                  <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-3">
+                    <h3 className="text-sm font-bold text-[#062B4D]">تفکیک دستگاه بازدیدکنندگان</h3>
+                    {analyticsData.deviceBreakdown.length === 0 ? (
+                      <p className="text-xs text-[#64748B]">داده‌ای ثبت نشده است.</p>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {analyticsData.deviceBreakdown.map((dev) => {
+                          const pct =
+                            analyticsData.periodVisits > 0
+                              ? Math.round((dev.count / analyticsData.periodVisits) * 100)
+                              : 0;
+                          return (
+                            <div
+                              key={dev.deviceType}
+                              className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[#F7FAFC]"
+                            >
+                              <div className="flex items-center gap-2 font-medium text-[#062B4D]">
+                                {dev.deviceType === 'mobile' ? (
+                                  <Smartphone className="w-4 h-4 text-[#08A9C5]" />
+                                ) : dev.deviceType === 'tablet' ? (
+                                  <Tablet className="w-4 h-4 text-[#08A9C5]" />
+                                ) : (
+                                  <Monitor className="w-4 h-4 text-[#08A9C5]" />
+                                )}
+                                <span>
+                                  {DEVICE_PERSIAN_LABELS[dev.deviceType] || dev.deviceType}
+                                </span>
+                              </div>
+                              <span className="font-mono-num font-bold text-[#087A9D]">
+                                {dev.count.toLocaleString('fa-IR')} ({pct}٪)
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Browsers */}
+                  <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-3">
+                    <h3 className="text-sm font-bold text-[#062B4D]">مرورگرهای پرتکرار</h3>
+                    {analyticsData.browserBreakdown.length === 0 ? (
+                      <p className="text-xs text-[#64748B]">داده‌ای ثبت نشده است.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {analyticsData.browserBreakdown.map((br) => (
+                          <div
+                            key={br.browser}
+                            className="px-3 py-1.5 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] text-xs flex items-center gap-2"
+                          >
+                            <span className="font-mono-num font-medium text-[#062B4D]">
+                              {br.browser}
+                            </span>
+                            <span className="font-mono-num font-bold text-[#087A9D]">
+                              {br.count.toLocaleString('fa-IR')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top Referrers */}
+                  <div className="bg-white rounded-2xl border border-[#E3EBF0] p-5 space-y-3">
+                    <h3 className="text-sm font-bold text-[#062B4D] flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-[#08A9C5]" />
+                      <span>منابع ورودی (Referrers)</span>
+                    </h3>
+                    {analyticsData.topReferrers.length === 0 ? (
+                      <p className="text-xs text-[#64748B]">
+                        بیشتر بازدیدها به‌صورت مستقیم (Direct) ثبت شده‌اند.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {analyticsData.topReferrers.map((ref) => (
+                          <div
+                            key={ref.referrer}
+                            className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-[#F7FAFC]"
+                          >
+                            <span className="font-mono-num text-[#263B50] truncate dir-ltr">
+                              {ref.referrer}
+                            </span>
+                            <span className="font-mono-num font-bold text-[#087A9D] shrink-0">
+                              {ref.count.toLocaleString('fa-IR')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Visits Table */}
+              <div className="bg-white rounded-2xl border border-[#E3EBF0] p-6 space-y-4">
+                <h3 className="text-sm font-bold text-[#062B4D]">آخرین بازدیدهای ثبت‌شده</h3>
+                {analyticsData.recentVisits.length === 0 ? (
+                  <p className="text-xs text-[#64748B]">هنوز بازدیدی ثبت نشده است.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-right border-collapse min-w-[600px]">
+                      <thead>
+                        <tr className="border-b border-[#E3EBF0] text-[#64748B]">
+                          <th className="py-2.5 px-3 font-medium">صفحه</th>
+                          <th className="py-2.5 px-3 font-medium">دستگاه</th>
+                          <th className="py-2.5 px-3 font-medium">مرورگر</th>
+                          <th className="py-2.5 px-3 font-medium">منبع ورودی</th>
+                          <th className="py-2.5 px-3 font-medium">زمان (به وقت ایران)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E3EBF0]">
+                        {analyticsData.recentVisits.map((v) => (
+                          <tr key={v.id} className="hover:bg-[#F7FAFC]">
+                            <td className="py-2.5 px-3">
+                              <span className="font-bold text-[#062B4D] block">
+                                {ROUTE_PERSIAN_LABELS[v.path] || v.path}
+                              </span>
+                              <span className="font-mono-num text-[11px] text-[#64748B] dir-ltr">
+                                {v.path}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-[#435466]">
+                              {DEVICE_PERSIAN_LABELS[v.deviceType] || v.deviceType}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono-num text-[#435466]">
+                              {v.browser}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono-num text-[#64748B] max-w-[200px] truncate dir-ltr">
+                              {v.referrer || 'مستقیم'}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono-num text-[#64748B] whitespace-nowrap">
+                              {formatIranDateTime(v.visitedAt)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1564,28 +1737,67 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-[#263B50] mb-1">لینک LinkedIn</label>
-                <input
-                  type="text"
-                  value={contactForm.linkedin || ''}
-                  onChange={(e) =>
-                    setContactForm({ ...contactForm, linkedin: e.target.value || null })
-                  }
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-[#263B50] mb-1">لینک Telegram</label>
-                <input
-                  type="text"
-                  value={contactForm.telegram || ''}
-                  onChange={(e) =>
-                    setContactForm({ ...contactForm, telegram: e.target.value || null })
-                  }
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
-                />
+            <div className="pt-2 border-t border-[#E3EBF0] space-y-3">
+              <h3 className="text-xs font-bold text-[#062B4D]">
+                لینک شبکه‌های اجتماعی (در صورت خالی بودن نمایش داده نمی‌شود)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-[#263B50] mb-1">
+                    لینک اینستاگرام (Instagram)
+                  </label>
+                  <input
+                    type="url"
+                    value={contactForm.instagram || ''}
+                    onChange={(e) =>
+                      setContactForm({ ...contactForm, instagram: e.target.value || null })
+                    }
+                    placeholder="https://instagram.com/bineshbi"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#263B50] mb-1">
+                    لینک تلگرام (Telegram)
+                  </label>
+                  <input
+                    type="url"
+                    value={contactForm.telegram || ''}
+                    onChange={(e) =>
+                      setContactForm({ ...contactForm, telegram: e.target.value || null })
+                    }
+                    placeholder="https://t.me/bineshbi"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#263B50] mb-1">
+                    لینک بله (Bale)
+                  </label>
+                  <input
+                    type="url"
+                    value={contactForm.bale || ''}
+                    onChange={(e) =>
+                      setContactForm({ ...contactForm, bale: e.target.value || null })
+                    }
+                    placeholder="https://ble.ir/bineshbi"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#263B50] mb-1">
+                    لینک لینکدین (LinkedIn)
+                  </label>
+                  <input
+                    type="url"
+                    value={contactForm.linkedin || ''}
+                    onChange={(e) =>
+                      setContactForm({ ...contactForm, linkedin: e.target.value || null })
+                    }
+                    placeholder="https://linkedin.com/company/bineshbi"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] dir-ltr text-left"
+                  />
+                </div>
               </div>
             </div>
           </div>

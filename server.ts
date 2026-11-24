@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import * as dotenv from 'dotenv';
 import crypto from 'crypto';
+import fs from 'fs';
 import path from 'path';
 import {
   initDatabase,
@@ -31,13 +32,26 @@ import {
   getAnalysisRequests,
   createAnalysisRequest,
   updateAnalysisRequest,
+  recordPageVisit,
+  getAnalyticsSummary,
   hashPassword,
   ConsultationStatus,
   UserRecord
 } from './src/server/db.ts';
 import { dispatchNewConsultationNotifications } from './src/server/notifications.ts';
+import { SEO_META, VALID_SPA_ROUTES } from './src/data/seoMeta.ts';
+import { RoutePath } from './src/data/bineshData.ts';
+import { renderPageHtml, render404Html } from './src/server/prerenderHtml.tsx';
 
 dotenv.config();
+
+const VALID_ROUTE_SET = new Set<string>(VALID_SPA_ROUTES);
+const CANONICAL_HOST = 'bineshbi.ir';
+const PRODUCTION_HOSTS = new Set(['bineshbi.ir', 'www.bineshbi.ir']);
+
+function looksLikeAssetRequest(pathname: string): boolean {
+  return pathname.startsWith('/assets/') || /\.[a-z0-9]{1,8}$/i.test(pathname);
+}
 
 const PORT = 3000;
 const AUTH_SECRET = process.env.AUTH_SECRET || 'binesh-secret-token-key-2026';
@@ -134,6 +148,109 @@ function checkConsultationRateLimit(ip: string): boolean {
   return true;
 }
 
+const analyticsRateMap = new Map<string, number[]>();
+const ANALYTICS_RATE_WINDOW_MS = 60 * 1000;
+const MAX_VISITS_PER_MIN = 120;
+
+function checkAnalyticsRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const timestamps = (analyticsRateMap.get(ip) || []).filter(
+    (t) => now - t < ANALYTICS_RATE_WINDOW_MS
+  );
+  if (timestamps.length >= MAX_VISITS_PER_MIN) {
+    analyticsRateMap.set(ip, timestamps);
+    return false;
+  }
+  timestamps.push(now);
+  analyticsRateMap.set(ip, timestamps);
+  return true;
+}
+
+function detectDeviceAndBrowser(userAgent: string): { deviceType: string; browser: string } {
+  const ua = userAgent.toLowerCase();
+  let deviceType = 'desktop';
+  if (/ipad|tablet|playbook|silk|(android(?!.*mobi))/i.test(ua)) {
+    deviceType = 'tablet';
+  } else if (/mobile|iphone|ipod|android|blackberry|iemobile|opera mini/i.test(ua)) {
+    deviceType = 'mobile';
+  }
+
+  let browser = 'Other';
+  if (ua.includes('edg/') || ua.includes('edge/')) {
+    browser = 'Edge';
+  } else if (ua.includes('opr/') || ua.includes('opera')) {
+    browser = 'Opera';
+  } else if (ua.includes('firefox/')) {
+    browser = 'Firefox';
+  } else if (ua.includes('chrome/') || ua.includes('crios/')) {
+    browser = 'Chrome';
+  } else if (ua.includes('safari/')) {
+    browser = 'Safari';
+  }
+
+  return { deviceType, browser };
+}
+
+function sanitizeSocialUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
+    return '';
+  }
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return parsed.toString().slice(0, 300);
+  } catch {
+    return '';
+  }
+}
+
+function buildStructuredSettings(settings: Record<string, string>) {
+  const smsProvider =
+    settings.smsEnabled === 'false' && settings.smsProvider === 'none'
+      ? 'none'
+      : settings.smsProvider === 'kavenegar' || settings.smsProvider === 'melipayamak'
+      ? settings.smsEnabled === 'false'
+        ? 'none'
+        : settings.smsProvider
+      : 'none';
+
+  return {
+    ...settings,
+    contactInfo: {
+      phone: settings.phone || null,
+      email: settings.email || null,
+      address: settings.address || null,
+      workingHours: settings.workingHours || null,
+      instagram: settings.instagram || null,
+      telegram: settings.telegram || null,
+      bale: settings.bale || null,
+      linkedin: settings.linkedin || null,
+      otherSocial: settings.otherSocial || null
+    },
+    notificationSettings: {
+      adminAlertPhone: settings.notifyAdminPhone || settings.phone || '09164006698',
+      adminAlertEmail: settings.notifyAdminEmail || settings.email || 'info@bineshbi.ir',
+      enableSoundAlert: settings.soundAlertEnabled !== 'false',
+      smsProvider,
+      kavenegarApiKey: settings.kavenegarApiKey || '',
+      kavenegarSender: settings.kavenegarSender || '',
+      melipayamakUsername: settings.melipayamakUsername || '',
+      melipayamakPassword: settings.melipayamakPassword || '',
+      melipayamakFrom: settings.melipayamakFrom || '',
+      smtpHost: settings.smtpHost || '',
+      smtpPort: Number(settings.smtpPort || 587),
+      smtpUser: settings.smtpUser || '',
+      smtpPass: settings.smtpPass || '',
+      smtpFrom: settings.smtpFrom || 'noreply@bineshbi.ir'
+    }
+  };
+}
+
 const STATUS_PERSIAN_LABELS: Record<ConsultationStatus, string> = {
   new: 'ثبت شده — در انتظار بررسی کارشناس',
   contacted: 'تماس اولیه برقرار شد',
@@ -146,6 +263,64 @@ async function startServer() {
   await initDatabase();
 
   const app = express();
+  app.set('trust proxy', true);
+
+  // ==========================================================================
+  // 0. SINGLE-HOP 301 CANONICAL REDIRECTS (HTTPS, NON-WWW, NO TRAILING SLASH)
+  // ==========================================================================
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      next();
+      return;
+    }
+
+    const rawHostHeader = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+    const hostWithoutPort = rawHostHeader.replace(/:\d+$/, '');
+    const isProductionDomain = PRODUCTION_HOSTS.has(hostWithoutPort);
+
+    const rawProtoHeader = String(req.headers['x-forwarded-proto'] || req.protocol || 'http')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+
+    const originalUrl = req.originalUrl || '/';
+    const queryIdx = originalUrl.indexOf('?');
+    const rawPath = queryIdx >= 0 ? originalUrl.slice(0, queryIdx) : originalUrl;
+    const queryString = queryIdx >= 0 ? originalUrl.slice(queryIdx) : '';
+
+    // Collapse multiple leading slashes to prevent protocol-relative open redirects
+    let normalizedPath = rawPath.replace(/^\/+/, '/');
+    if (!normalizedPath) normalizedPath = '/';
+
+    // Strip trailing slash on internal routes (never on root / or /api/)
+    if (
+      normalizedPath.length > 1 &&
+      normalizedPath.endsWith('/') &&
+      !normalizedPath.startsWith('/api/')
+    ) {
+      normalizedPath = normalizedPath.replace(/\/+$/, '') || '/';
+    }
+
+    const needsHostOrProtoRedirect =
+      isProductionDomain && (rawProtoHeader !== 'https' || hostWithoutPort === 'www.bineshbi.ir');
+    const needsPathRedirect = normalizedPath !== rawPath;
+
+    if (isProductionDomain && (needsHostOrProtoRedirect || needsPathRedirect)) {
+      res.redirect(301, `https://${CANONICAL_HOST}${normalizedPath}${queryString}`);
+      return;
+    }
+
+    if (!isProductionDomain && needsPathRedirect) {
+      res.redirect(301, `${normalizedPath}${queryString}`);
+      return;
+    }
+
+    next();
+  });
+
   app.use(express.json({ limit: '2mb' }));
 
   // ==========================================================================
@@ -168,8 +343,10 @@ async function startServer() {
           email: settings.email || null,
           address: settings.address || null,
           workingHours: settings.workingHours || null,
-          linkedin: settings.linkedin || null,
+          instagram: settings.instagram || null,
           telegram: settings.telegram || null,
+          bale: settings.bale || null,
+          linkedin: settings.linkedin || null,
           otherSocial: settings.otherSocial || null
         }
       });
@@ -410,65 +587,79 @@ async function startServer() {
   });
 
   // ==========================================================================
-  // 4. CLIENT PORTAL API (/api/portal/*)
+  // 4. INTERNAL VISITOR ANALYTICS TRACKING (/api/analytics/visit)
   // ==========================================================================
-  app.get('/api/portal/data', requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/analytics/visit', async (req, res) => {
     try {
-      const user = req.currentUser!;
-      const orgs = await getOrganizations();
-      const requestedOrgId = String(req.query.orgId || '').trim();
-      const targetOrgId =
-        user.role === 'admin' && requestedOrgId
-          ? requestedOrgId
-          : user.organizationId || orgs[0]?.id || 'org-kabinowood';
+      const ip =
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+        req.socket.remoteAddress ||
+        'unknown';
 
-      const organization = orgs.find((o) => o.id === targetOrgId) || orgs[0] || null;
-      const [items, requests] = await Promise.all([
-        getPortalItems(targetOrgId),
-        getAnalysisRequests(targetOrgId)
-      ]);
-
-      res.json({
-        ok: true,
-        organization,
-        organizations: user.role === 'admin' ? orgs : orgs.filter((o) => o.id === targetOrgId),
-        portalItems: items,
-        analysisRequests: requests
-      });
-    } catch (error) {
-      console.error('Portal data error:', error);
-      res.status(500).json({ ok: false, error: 'خطا در بارگذاری اطلاعات پورتال' });
-    }
-  });
-
-  app.post('/api/portal/requests', requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const user = req.currentUser!;
-      const { title, description, priority, organizationId } = req.body || {};
-      const cleanTitle = String(title || '').trim();
-      const cleanDesc = String(description || '').trim();
-      if (!cleanTitle || !cleanDesc) {
-        res.status(400).json({ ok: false, error: 'عنوان و شرح درخواست تحلیلی الزامی است.' });
+      if (!checkAnalyticsRateLimit(ip)) {
+        res.status(429).json({ ok: false });
         return;
       }
-      const targetOrgId =
-        user.role === 'admin' && organizationId
-          ? String(organizationId)
-          : user.organizationId || 'org-kabinowood';
 
-      const created = await createAnalysisRequest({
-        organizationId: targetOrgId,
-        userId: user.id,
-        userName: user.fullName,
-        title: cleanTitle,
-        description: cleanDesc,
-        priority: priority === 'فوری' || priority === 'مهم' ? priority : 'عادی'
+      const rawPath = String(req.body?.path || '/').trim();
+      const cleanPath = rawPath.startsWith('/') ? rawPath.split('?')[0].slice(0, 200) : '/';
+
+      // Never track internal admin/auth/api routes
+      if (
+        cleanPath.startsWith('/admin') ||
+        cleanPath.startsWith('/auth') ||
+        cleanPath.startsWith('/api') ||
+        cleanPath.startsWith('/portal') ||
+        cleanPath.startsWith('/design-system')
+      ) {
+        res.json({ ok: true, skipped: true });
+        return;
+      }
+
+      const pageTitle = String(req.body?.pageTitle || '').trim().slice(0, 200);
+      let cleanReferrer = '';
+      const rawRef = String(req.body?.referrer || '').trim();
+      if (rawRef) {
+        try {
+          const parsed = new URL(rawRef);
+          if (parsed.hostname && !parsed.hostname.includes('bineshbi.ir') && parsed.hostname !== 'localhost') {
+            cleanReferrer = parsed.hostname.slice(0, 200);
+          }
+        } catch {
+          cleanReferrer = '';
+        }
+      }
+
+      const ua = String(req.headers['user-agent'] || '').slice(0, 400);
+
+      // Filter automated bots, crawlers, scrapers & synthetic monitoring tools
+      const BOT_UA_REGEX =
+        /bot|crawl|spider|googlebot|ahrefs|semrush|bingbot|yandex|curl|lighthouse|slurp|duckduckbot|baiduspider|facebookexternalhit|telegrambot|whatsapp|headlesschrome|playwright|puppeteer|wget|python-requests|axios\/|scrapy|pagespeed|gtmetrix|pingdom|uptimerobot/i;
+      if (!ua.trim() || BOT_UA_REGEX.test(ua)) {
+        res.status(200).json({ ok: true, skipped: true, reason: 'bot' });
+        return;
+      }
+
+      const { deviceType, browser } = detectDeviceAndBrowser(ua);
+      const visitorHash = crypto
+        .createHmac('sha256', AUTH_SECRET)
+        .update(`${ip}|${ua}`)
+        .digest('hex')
+        .slice(0, 32);
+
+      await recordPageVisit({
+        path: cleanPath,
+        pageTitle,
+        referrer: cleanReferrer,
+        visitorHash,
+        deviceType,
+        browser
       });
 
-      res.status(201).json({ ok: true, request: created });
+      res.status(201).json({ ok: true });
     } catch (error) {
-      console.error('Create analysis request error:', error);
-      res.status(500).json({ ok: false, error: 'خطا در ثبت درخواست تحلیل' });
+      console.error('Analytics visit record error:', error);
+      res.status(500).json({ ok: false });
     }
   });
 
@@ -483,10 +674,23 @@ async function startServer() {
         ok: true,
         unreadCount: unread.length,
         totalCount: consultations.length,
+        latestId: consultations[0]?.id || 0,
         latestRequest: consultations[0] || null
       });
     } catch {
       res.status(500).json({ ok: false });
+    }
+  });
+
+  app.get('/api/admin/analytics', requireAdmin, async (req, res) => {
+    try {
+      const daysParam = Number(req.query.days || 30);
+      const days = Number.isFinite(daysParam) ? Math.max(1, Math.min(365, Math.floor(daysParam))) : 30;
+      const analytics = await getAnalyticsSummary(days);
+      res.json({ ok: true, analytics });
+    } catch (error) {
+      console.error('Admin analytics error:', error);
+      res.status(500).json({ ok: false, error: 'خطا در بارگذاری آمار بازدید داخلی' });
     }
   });
 
@@ -518,7 +722,7 @@ async function startServer() {
         unreadCount: consultations.filter((c) => !c.isRead).length,
         portfolio,
         insights,
-        settings,
+        settings: buildStructuredSettings(settings),
         organizations,
         users: users.map((u) => ({
           id: u.id,
@@ -630,7 +834,7 @@ async function startServer() {
         projectSubtitle: String(body.projectSubtitle || '').trim(),
         industry: String(body.industry || '').trim(),
         serviceType: String(body.serviceType || '').trim(),
-        image: String(body.image || '/assets/aistudio/Kabinowood_9a6089ec.png').trim(),
+        image: String(body.image || '/assets/aistudio/Kabinowood_9a6089ec.webp').trim(),
         intro: Array.isArray(body.intro)
           ? body.intro
           : String(body.intro || '')
@@ -707,13 +911,72 @@ async function startServer() {
   app.put('/api/admin/settings', requireAdmin, async (req, res) => {
     try {
       const updates = req.body || {};
-      for (const [k, v] of Object.entries(updates)) {
-        if (typeof v === 'string') {
-          await setSetting(k, v);
+
+      if (updates.contactInfo && typeof updates.contactInfo === 'object') {
+        const ci = updates.contactInfo as Record<string, unknown>;
+        const textFields = ['phone', 'email', 'address', 'workingHours', 'otherSocial'];
+        for (const field of textFields) {
+          if (field in ci) {
+            await setSetting(field, String(ci[field] ?? '').trim().slice(0, 300));
+          }
+        }
+        const socialFields = ['instagram', 'telegram', 'bale', 'linkedin'];
+        for (const field of socialFields) {
+          if (field in ci) {
+            await setSetting(field, sanitizeSocialUrl(ci[field]));
+          }
         }
       }
+
+      if (updates.notificationSettings && typeof updates.notificationSettings === 'object') {
+        const ns = updates.notificationSettings as Record<string, unknown>;
+        if ('adminAlertPhone' in ns) {
+          await setSetting('notifyAdminPhone', String(ns.adminAlertPhone ?? '').trim());
+        }
+        if ('adminAlertEmail' in ns) {
+          await setSetting('notifyAdminEmail', String(ns.adminAlertEmail ?? '').trim());
+        }
+        if ('enableSoundAlert' in ns) {
+          await setSetting('soundAlertEnabled', ns.enableSoundAlert ? 'true' : 'false');
+        }
+        if ('smsProvider' in ns) {
+          const provider = String(ns.smsProvider || 'none');
+          await setSetting('smsProvider', provider);
+          await setSetting('smsEnabled', provider === 'none' ? 'false' : 'true');
+        }
+        const notifKeys = [
+          'kavenegarApiKey',
+          'kavenegarSender',
+          'kavenegarTemplate',
+          'melipayamakUsername',
+          'melipayamakPassword',
+          'melipayamakFrom',
+          'smtpHost',
+          'smtpPort',
+          'smtpUser',
+          'smtpPass',
+          'smtpFrom'
+        ];
+        for (const k of notifKeys) {
+          if (k in ns) {
+            await setSetting(k, String(ns[k] ?? '').trim());
+          }
+        }
+        if ('smtpHost' in ns) {
+          await setSetting('emailEnabled', String(ns.smtpHost ?? '').trim() ? 'true' : 'false');
+        }
+      }
+
+      // Support flat key-value updates as well
+      const socialFlatKeys = new Set(['instagram', 'telegram', 'bale', 'linkedin']);
+      for (const [k, v] of Object.entries(updates)) {
+        if (typeof v === 'string') {
+          await setSetting(k, socialFlatKeys.has(k) ? sanitizeSocialUrl(v) : v.trim());
+        }
+      }
+
       const settings = await getAllSettings();
-      res.json({ ok: true, settings });
+      res.json({ ok: true, settings: buildStructuredSettings(settings) });
     } catch (error) {
       console.error('Settings update error:', error);
       res.status(500).json({ ok: false, error: 'خطا در ذخیره تنظیمات' });
@@ -729,7 +992,7 @@ async function startServer() {
         fullName: 'تست سامانه اطلاع‌رسانی بینش',
         businessName: 'مدیریت بینش',
         phone: '09164006698',
-        email: 'binesh.office@gmail.com',
+        email: 'info@bineshbi.ir',
         service: 'تست ارسال پیامک و ایمیل',
         notes: 'این یک پیام آزمایشی برای بررسی صحت تنظیمات پیامک و ایمیل است.',
         status: 'new' as const,
@@ -743,7 +1006,11 @@ async function startServer() {
         updatedAt: new Date().toISOString()
       };
       const result = await dispatchNewConsultationNotifications(dummyRecord);
-      res.json({ ok: true, result });
+      const logText =
+        typeof result === 'object' && result && 'log' in result
+          ? String((result as { log?: string }).log || 'انجام شد')
+          : 'تست اطلاع‌رسانی اجرا شد.';
+      res.json({ ok: true, result, log: logText });
     } catch (error) {
       res.status(500).json({ ok: false, error: (error as Error).message });
     }
@@ -856,20 +1123,105 @@ async function startServer() {
     }
   });
 
+  // Catch-all for unknown /api/* endpoints (strict 404, never HTML)
+  app.all('/api/*', (_req, res) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.status(404).json({ ok: false, error: 'مسیر API موردنظر یافت نشد.' });
+  });
+
   // ==========================================================================
-  // VITE MIDDLEWARE (DEVELOPMENT) OR STATIC FILES (PRODUCTION)
+  // PRE-RENDERED HTML SERVING & REAL 404 (NO SOFT 404 IN DEV OR PRODUCTION)
   // ==========================================================================
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa'
+      appType: 'custom'
     });
     app.use(vite.middlewares);
+
+    app.use(async (req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        next();
+        return;
+      }
+
+      const routePath = req.path || '/';
+      try {
+        if (VALID_ROUTE_SET.has(routePath)) {
+          const templatePath = path.resolve(process.cwd(), 'index.html');
+          const rawTemplate = fs.readFileSync(templatePath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, rawTemplate);
+          const html = renderPageHtml(transformed, routePath as RoutePath);
+          if (SEO_META[routePath as RoutePath]?.noindex) {
+            res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+          }
+          res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
+          return;
+        }
+
+        // Unknown route or missing static asset -> real 404 + noindex
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+        if (looksLikeAssetRequest(routePath)) {
+          res.status(404).type('text/plain; charset=utf-8').send('404 Not Found');
+          return;
+        }
+
+        const templatePath = path.resolve(process.cwd(), 'index.html');
+        const rawTemplate = fs.readFileSync(templatePath, 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl, rawTemplate);
+        const notFoundHtml = render404Html(transformed);
+        res.status(404).setHeader('Content-Type', 'text/html; charset=utf-8').send(notFoundHtml);
+      } catch (err) {
+        vite.ssrFixStacktrace(err as Error);
+        next(err);
+      }
+    });
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    const distPath = path.resolve(process.cwd(), 'dist');
+    const prerenderDir = path.resolve(distPath, 'prerendered');
+
+    // index: false & redirect: false prevent directory trailing-slash redirects and homepage Soft 404s
+    app.use(express.static(distPath, { index: false, redirect: false }));
+
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        next();
+        return;
+      }
+
+      const routePath = req.path || '/';
+      if (VALID_ROUTE_SET.has(routePath)) {
+        if (SEO_META[routePath as RoutePath]?.noindex) {
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+        }
+        const relFile = routePath === '/' ? 'index.html' : `${routePath.replace(/^\/+/, '')}.html`;
+        const resolved = path.resolve(prerenderDir, relFile);
+        if (resolved.startsWith(prerenderDir + path.sep) && fs.existsSync(resolved)) {
+          res.status(200).sendFile(resolved);
+          return;
+        }
+        const fallbackTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'utf-8');
+        const html = renderPageHtml(fallbackTemplate, routePath as RoutePath);
+        res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
+        return;
+      }
+
+      // Unknown route or missing static asset -> strict 404 + noindex
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      if (looksLikeAssetRequest(routePath)) {
+        res.status(404).type('text/plain; charset=utf-8').send('404 Not Found');
+        return;
+      }
+
+      const notFoundFile = path.resolve(prerenderDir, '404.html');
+      if (notFoundFile.startsWith(prerenderDir + path.sep) && fs.existsSync(notFoundFile)) {
+        res.status(404).sendFile(notFoundFile);
+        return;
+      }
+
+      const fallbackTemplate = fs.readFileSync(path.join(distPath, 'index.html'), 'utf-8');
+      const notFoundHtml = render404Html(fallbackTemplate);
+      res.status(404).setHeader('Content-Type', 'text/html; charset=utf-8').send(notFoundHtml);
     });
   }
 

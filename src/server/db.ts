@@ -3,7 +3,11 @@ import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { PORTFOLIO_PLACEHOLDERS, INSIGHTS_PLACEHOLDERS } from '../data/bineshData.ts';
+import {
+  PORTFOLIO_PLACEHOLDERS,
+  INSIGHTS_PLACEHOLDERS,
+  isPublicInsightPost
+} from '../data/bineshData.ts';
 import { contactInfo as initialContactInfo } from '../data/contactInfo.ts';
 
 export type ConsultationStatus = 'new' | 'contacted' | 'in_progress' | 'converted' | 'archived';
@@ -105,6 +109,34 @@ export interface AnalysisRequestRecord {
   updatedAt: string;
 }
 
+export interface PageVisitRecord {
+  id: number;
+  path: string;
+  pageTitle: string;
+  referrer: string;
+  deviceType: string;
+  browser: string;
+  visitedAt: string;
+}
+
+export interface AnalyticsSummary {
+  dbEngine: 'mysql' | 'sqlite';
+  rangeDays: number;
+  totalVisits: number;
+  totalUniqueVisitors: number;
+  periodVisits: number;
+  periodUniqueVisitors: number;
+  todayVisits: number;
+  todayUniqueVisitors: number;
+  last7DaysVisits: number;
+  topPages: { path: string; pageTitle: string; views: number; uniqueVisitors: number }[];
+  dailyTrend: { date: string; views: number; uniqueVisitors: number }[];
+  deviceBreakdown: { deviceType: string; count: number }[];
+  browserBreakdown: { browser: string; count: number }[];
+  topReferrers: { referrer: string; count: number }[];
+  recentVisits: PageVisitRecord[];
+}
+
 export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(`binesh_salt_${password}`).digest('hex');
 }
@@ -119,6 +151,10 @@ export function generateTrackingCode(): string {
 const useMysql =
   process.env.DB_ENGINE === 'mysql' &&
   Boolean(process.env.MYSQL_HOST && process.env.MYSQL_USER && process.env.MYSQL_DATABASE);
+
+export function getDatabaseEngine(): 'mysql' | 'sqlite' {
+  return useMysql ? 'mysql' : 'sqlite';
+}
 
 let sqliteDb: Database.Database | null = null;
 let mysqlPool: mysql.Pool | null = null;
@@ -264,6 +300,21 @@ export async function initDatabase(): Promise<void> {
         updated_at VARCHAR(64) NOT NULL
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS page_visits (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        path VARCHAR(255) NOT NULL,
+        page_title VARCHAR(255) DEFAULT '',
+        referrer VARCHAR(512) DEFAULT '',
+        visitor_hash VARCHAR(64) NOT NULL,
+        device_type VARCHAR(32) NOT NULL DEFAULT 'desktop',
+        browser VARCHAR(64) NOT NULL DEFAULT 'Other',
+        visited_at VARCHAR(64) NOT NULL,
+        INDEX idx_page_visits_visited_at (visited_at),
+        INDEX idx_page_visits_path (path),
+        INDEX idx_page_visits_visitor (visitor_hash)
+      ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    `);
   } else {
     const db = getSqlite();
     db.exec(`
@@ -366,6 +417,21 @@ export async function initDatabase(): Promise<void> {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS page_visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT NOT NULL,
+        page_title TEXT DEFAULT '',
+        referrer TEXT DEFAULT '',
+        visitor_hash TEXT NOT NULL,
+        device_type TEXT NOT NULL DEFAULT 'desktop',
+        browser TEXT NOT NULL DEFAULT 'Other',
+        visited_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_page_visits_visited_at ON page_visits (visited_at);
+      CREATE INDEX IF NOT EXISTS idx_page_visits_path ON page_visits (path);
+      CREATE INDEX IF NOT EXISTS idx_page_visits_visitor ON page_visits (visitor_hash);
     `);
   }
 
@@ -375,12 +441,17 @@ export async function initDatabase(): Promise<void> {
 async function seedInitialData(): Promise<void> {
   const now = new Date().toISOString();
 
-  // 1. Seed & sync core Portfolio Items (ensuring Paytakht name fix & 3-stage structure)
+  // 1. Seed & sync core Portfolio Items (ensuring Paytakht name fix, 3-stage structure & WebP images)
   const existingPortfolio = await getPortfolioItems(true);
   const defaultIds = new Set(PORTFOLIO_PLACEHOLDERS.map((p) => p.id));
   if (
     existingPortfolio.length === 0 ||
-    existingPortfolio.some((p) => p.clientName === 'تجهیزات اداری سرمایه' || !p.solution)
+    existingPortfolio.some(
+      (p) =>
+        p.clientName === 'تجهیزات اداری سرمایه' ||
+        !p.solution ||
+        (defaultIds.has(p.id) && p.image.endsWith('.png'))
+    )
   ) {
     for (let i = 0; i < PORTFOLIO_PLACEHOLDERS.length; i++) {
       const item = PORTFOLIO_PLACEHOLDERS[i];
@@ -405,7 +476,7 @@ async function seedInitialData(): Promise<void> {
     }
   }
 
-  // 2. Seed Insight Posts if empty
+  // 2. Seed Insight Posts if empty (drafts remain unpublished until admin publishes)
   const existingInsights = await getInsightPosts(true);
   if (existingInsights.length === 0) {
     for (let i = 0; i < INSIGHTS_PLACEHOLDERS.length; i++) {
@@ -419,7 +490,7 @@ async function seedInitialData(): Promise<void> {
         content: post.excerpt,
         statusNote: post.statusNote,
         sortOrder: i + 1,
-        isPublished: true
+        isPublished: isPublicInsightPost(post)
       });
     }
   }
@@ -428,19 +499,21 @@ async function seedInitialData(): Promise<void> {
   const currentSettings = await getAllSettings();
   const defaultSettings: Record<string, string> = {
     phone: initialContactInfo.phone || '09164006698',
-    email: initialContactInfo.email || 'binesh.office@gmail.com',
+    email: initialContactInfo.email || 'info@bineshbi.ir',
     address:
       initialContactInfo.address ||
       'شیراز - بلوار مدرس - خیابان آزادگان - کارخانه نوآوری شیراز',
     workingHours:
       initialContactInfo.workingHours ||
       'شنبه تا چهارشنبه از ساعت ۸ تا ۱۷ - پنجشنبه از ساعت ۸ تا ۱۲',
-    linkedin: initialContactInfo.linkedin || '',
+    instagram: initialContactInfo.instagram || '',
     telegram: initialContactInfo.telegram || '',
+    bale: initialContactInfo.bale || '',
+    linkedin: initialContactInfo.linkedin || '',
     otherSocial: initialContactInfo.otherSocial || '',
     notifyAdminPhone: process.env.NOTIFY_ADMIN_PHONE || initialContactInfo.phone || '09164006698',
     notifyAdminEmail:
-      process.env.NOTIFY_ADMIN_EMAIL || initialContactInfo.email || 'binesh.office@gmail.com',
+      process.env.NOTIFY_ADMIN_EMAIL || initialContactInfo.email || 'info@bineshbi.ir',
     soundAlertEnabled: 'true',
     smsEnabled: 'false',
     smsProvider: process.env.SMS_PROVIDER || 'kavenegar',
@@ -455,13 +528,27 @@ async function seedInitialData(): Promise<void> {
     smtpPort: process.env.SMTP_PORT || '587',
     smtpUser: process.env.SMTP_USER || '',
     smtpPass: process.env.SMTP_PASS || '',
-    smtpFrom: process.env.SMTP_FROM || 'noreply@binesh.ir'
+    smtpFrom: process.env.SMTP_FROM || 'noreply@bineshbi.ir'
   };
 
   for (const [k, v] of Object.entries(defaultSettings)) {
     if (currentSettings[k] === undefined) {
       await setSetting(k, v);
     }
+  }
+  if (
+    currentSettings.email === 'binesh.office@gmail.com' ||
+    currentSettings.email === 'ad.binesh.ai@gmail.com' ||
+    currentSettings.email === 'info@binesh.ir'
+  ) {
+    await setSetting('email', 'info@bineshbi.ir');
+  }
+  if (
+    currentSettings.notifyAdminEmail === 'binesh.office@gmail.com' ||
+    currentSettings.notifyAdminEmail === 'ad.binesh.ai@gmail.com' ||
+    currentSettings.notifyAdminEmail === 'info@binesh.ir'
+  ) {
+    await setSetting('notifyAdminEmail', 'info@bineshbi.ir');
   }
 
   // 4. Seed Default Organizations & Users if empty
@@ -898,13 +985,16 @@ export async function getInsightPosts(includeUnpublished = false): Promise<Insig
     ? 'SELECT * FROM insight_posts ORDER BY sort_order ASC, id ASC'
     : 'SELECT * FROM insight_posts WHERE is_published = 1 ORDER BY sort_order ASC, id ASC';
 
+  let records: InsightRecord[];
   if (useMysql) {
     const [rows] = await getMysql().query<mysql.RowDataPacket[]>(query);
-    return rows.map(mapInsightRow);
+    records = rows.map(mapInsightRow);
   } else {
     const rows = getSqlite().prepare(query).all() as Record<string, unknown>[];
-    return rows.map(mapInsightRow);
+    records = rows.map(mapInsightRow);
   }
+
+  return includeUnpublished ? records : records.filter(isPublicInsightPost);
 }
 
 export async function upsertInsightPost(post: InsightRecord): Promise<void> {
@@ -1402,4 +1492,312 @@ export async function updateAnalysisRequest(
       )
       .run(updates.status, updates.adminResponse, now, id);
   }
+}
+
+// ============================================================================
+// INTERNAL VISITOR ANALYTICS REPOSITORY (MySQL & SQLite Compatible)
+// ============================================================================
+
+export async function recordPageVisit(input: {
+  path: string;
+  pageTitle?: string;
+  referrer?: string;
+  visitorHash: string;
+  deviceType: string;
+  browser: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const cleanPath = input.path.slice(0, 255);
+  const cleanTitle = (input.pageTitle || '').slice(0, 255);
+  const cleanReferrer = (input.referrer || '').slice(0, 512);
+  const cleanHash = input.visitorHash.slice(0, 64);
+  const cleanDevice = input.deviceType.slice(0, 32);
+  const cleanBrowser = input.browser.slice(0, 64);
+
+  if (useMysql) {
+    await getMysql().execute(
+      `INSERT INTO page_visits (path, page_title, referrer, visitor_hash, device_type, browser, visited_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [cleanPath, cleanTitle, cleanReferrer, cleanHash, cleanDevice, cleanBrowser, now]
+    );
+  } else {
+    getSqlite()
+      .prepare(
+        `INSERT INTO page_visits (path, page_title, referrer, visitor_hash, device_type, browser, visited_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(cleanPath, cleanTitle, cleanReferrer, cleanHash, cleanDevice, cleanBrowser, now);
+  }
+}
+
+export async function getAnalyticsSummary(days = 30): Promise<AnalyticsSummary> {
+  const safeDays = Math.max(1, Math.min(365, Math.floor(days) || 30));
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const todayIso = todayStart.toISOString();
+
+  const last7Start = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const last7Iso = last7Start.toISOString();
+
+  const rangeStart = new Date(todayStart.getTime() - (safeDays - 1) * 24 * 60 * 60 * 1000);
+  const rangeIso = rangeStart.toISOString();
+
+  let totalVisits = 0;
+  let totalUniqueVisitors = 0;
+  let periodVisits = 0;
+  let periodUniqueVisitors = 0;
+  let todayVisits = 0;
+  let todayUniqueVisitors = 0;
+  let last7DaysVisits = 0;
+  let topPagesRaw: Record<string, unknown>[] = [];
+  let dailyRaw: Record<string, unknown>[] = [];
+  let deviceRaw: Record<string, unknown>[] = [];
+  let browserRaw: Record<string, unknown>[] = [];
+  let referrerRaw: Record<string, unknown>[] = [];
+  let recentRaw: Record<string, unknown>[] = [];
+
+  if (useMysql) {
+    const pool = getMysql();
+    const [
+      [allRows],
+      [periodRows],
+      [todayRows],
+      [last7Rows],
+      [pagesRows],
+      [trendRows],
+      [devRows],
+      [brRows],
+      [refRows],
+      [recRows]
+    ] = await Promise.all([
+      pool.query<mysql.RowDataPacket[]>(
+        'SELECT COUNT(*) AS cnt, COUNT(DISTINCT visitor_hash) AS uniq FROM page_visits'
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        'SELECT COUNT(*) AS cnt, COUNT(DISTINCT visitor_hash) AS uniq FROM page_visits WHERE visited_at >= ?',
+        [rangeIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        'SELECT COUNT(*) AS cnt, COUNT(DISTINCT visitor_hash) AS uniq FROM page_visits WHERE visited_at >= ?',
+        [todayIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        'SELECT COUNT(*) AS cnt FROM page_visits WHERE visited_at >= ?',
+        [last7Iso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        `SELECT path, MAX(page_title) AS page_title, COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS uniq
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY path
+         ORDER BY views DESC
+         LIMIT 15`,
+        [rangeIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        `SELECT SUBSTR(visited_at, 1, 10) AS day_key, COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS uniq
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY SUBSTR(visited_at, 1, 10)
+         ORDER BY day_key ASC`,
+        [rangeIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        `SELECT device_type, COUNT(*) AS cnt
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY device_type
+         ORDER BY cnt DESC`,
+        [rangeIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        `SELECT browser, COUNT(*) AS cnt
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY browser
+         ORDER BY cnt DESC
+         LIMIT 8`,
+        [rangeIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        `SELECT referrer, COUNT(*) AS cnt
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY referrer
+         ORDER BY cnt DESC
+         LIMIT 10`,
+        [rangeIso]
+      ),
+      pool.query<mysql.RowDataPacket[]>(
+        `SELECT id, path, page_title, referrer, device_type, browser, visited_at
+         FROM page_visits
+         ORDER BY id DESC
+         LIMIT 25`
+      )
+    ]);
+
+    totalVisits = Number(allRows[0]?.cnt || 0);
+    totalUniqueVisitors = Number(allRows[0]?.uniq || 0);
+    periodVisits = Number(periodRows[0]?.cnt || 0);
+    periodUniqueVisitors = Number(periodRows[0]?.uniq || 0);
+    todayVisits = Number(todayRows[0]?.cnt || 0);
+    todayUniqueVisitors = Number(todayRows[0]?.uniq || 0);
+    last7DaysVisits = Number(last7Rows[0]?.cnt || 0);
+    topPagesRaw = pagesRows;
+    dailyRaw = trendRows;
+    deviceRaw = devRows;
+    browserRaw = brRows;
+    referrerRaw = refRows;
+    recentRaw = recRows;
+  } else {
+    const db = getSqlite();
+    const allRow = db
+      .prepare('SELECT COUNT(*) AS cnt, COUNT(DISTINCT visitor_hash) AS uniq FROM page_visits')
+      .get() as Record<string, unknown>;
+    const periodRow = db
+      .prepare(
+        'SELECT COUNT(*) AS cnt, COUNT(DISTINCT visitor_hash) AS uniq FROM page_visits WHERE visited_at >= ?'
+      )
+      .get(rangeIso) as Record<string, unknown>;
+    const todayRow = db
+      .prepare(
+        'SELECT COUNT(*) AS cnt, COUNT(DISTINCT visitor_hash) AS uniq FROM page_visits WHERE visited_at >= ?'
+      )
+      .get(todayIso) as Record<string, unknown>;
+    const last7Row = db
+      .prepare('SELECT COUNT(*) AS cnt FROM page_visits WHERE visited_at >= ?')
+      .get(last7Iso) as Record<string, unknown>;
+
+    totalVisits = Number(allRow?.cnt || 0);
+    totalUniqueVisitors = Number(allRow?.uniq || 0);
+    periodVisits = Number(periodRow?.cnt || 0);
+    periodUniqueVisitors = Number(periodRow?.uniq || 0);
+    todayVisits = Number(todayRow?.cnt || 0);
+    todayUniqueVisitors = Number(todayRow?.uniq || 0);
+    last7DaysVisits = Number(last7Row?.cnt || 0);
+
+    topPagesRaw = db
+      .prepare(
+        `SELECT path, MAX(page_title) AS page_title, COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS uniq
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY path
+         ORDER BY views DESC
+         LIMIT 15`
+      )
+      .all(rangeIso) as Record<string, unknown>[];
+
+    dailyRaw = db
+      .prepare(
+        `SELECT SUBSTR(visited_at, 1, 10) AS day_key, COUNT(*) AS views, COUNT(DISTINCT visitor_hash) AS uniq
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY SUBSTR(visited_at, 1, 10)
+         ORDER BY day_key ASC`
+      )
+      .all(rangeIso) as Record<string, unknown>[];
+
+    deviceRaw = db
+      .prepare(
+        `SELECT device_type, COUNT(*) AS cnt
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY device_type
+         ORDER BY cnt DESC`
+      )
+      .all(rangeIso) as Record<string, unknown>[];
+
+    browserRaw = db
+      .prepare(
+        `SELECT browser, COUNT(*) AS cnt
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY browser
+         ORDER BY cnt DESC
+         LIMIT 8`
+      )
+      .all(rangeIso) as Record<string, unknown>[];
+
+    referrerRaw = db
+      .prepare(
+        `SELECT referrer, COUNT(*) AS cnt
+         FROM page_visits
+         WHERE visited_at >= ?
+         GROUP BY referrer
+         ORDER BY cnt DESC
+         LIMIT 10`
+      )
+      .all(rangeIso) as Record<string, unknown>[];
+
+    recentRaw = db
+      .prepare(
+        `SELECT id, path, page_title, referrer, device_type, browser, visited_at
+         FROM page_visits
+         ORDER BY id DESC
+         LIMIT 25`
+      )
+      .all() as Record<string, unknown>[];
+  }
+
+  // Fill every calendar day in range so the chart timeline is continuous
+  const dailyMap = new Map<string, { views: number; uniqueVisitors: number }>();
+  for (const r of dailyRaw) {
+    dailyMap.set(String(r.day_key), {
+      views: Number(r.views || 0),
+      uniqueVisitors: Number(r.uniq || 0)
+    });
+  }
+  const chartDays = Math.min(safeDays, 30);
+  const chartStart = new Date(todayStart.getTime() - (chartDays - 1) * 24 * 60 * 60 * 1000);
+  const dailyTrend: { date: string; views: number; uniqueVisitors: number }[] = [];
+  for (let i = 0; i < chartDays; i++) {
+    const d = new Date(chartStart.getTime() + i * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    const found = dailyMap.get(key);
+    dailyTrend.push({
+      date: key,
+      views: found?.views || 0,
+      uniqueVisitors: found?.uniqueVisitors || 0
+    });
+  }
+
+  return {
+    dbEngine: getDatabaseEngine(),
+    rangeDays: safeDays,
+    totalVisits,
+    totalUniqueVisitors,
+    periodVisits,
+    periodUniqueVisitors,
+    todayVisits,
+    todayUniqueVisitors,
+    last7DaysVisits,
+    topPages: topPagesRaw.map((r) => ({
+      path: String(r.path || '/'),
+      pageTitle: String(r.page_title || ''),
+      views: Number(r.views || 0),
+      uniqueVisitors: Number(r.uniq || 0)
+    })),
+    dailyTrend,
+    deviceBreakdown: deviceRaw.map((r) => ({
+      deviceType: String(r.device_type || 'desktop'),
+      count: Number(r.cnt || 0)
+    })),
+    browserBreakdown: browserRaw.map((r) => ({
+      browser: String(r.browser || 'Other'),
+      count: Number(r.cnt || 0)
+    })),
+    topReferrers: referrerRaw.map((r) => ({
+      referrer: String(r.referrer || ''),
+      count: Number(r.cnt || 0)
+    })),
+    recentVisits: recentRaw.map((r) => ({
+      id: Number(r.id),
+      path: String(r.path || '/'),
+      pageTitle: String(r.page_title || ''),
+      referrer: String(r.referrer || ''),
+      deviceType: String(r.device_type || 'desktop'),
+      browser: String(r.browser || 'Other'),
+      visitedAt: String(r.visited_at || '')
+    }))
+  };
 }

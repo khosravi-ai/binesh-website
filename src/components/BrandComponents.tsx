@@ -1,11 +1,90 @@
 import React, { useState } from 'react';
-import { Play, X, ChevronDown } from 'lucide-react';
-import { FaqItem } from '../data/bineshData';
+import { Play, X, ChevronDown, Copy, Check } from 'lucide-react';
+import { FaqItem, UNIFIED_CTA_LABEL } from '../data/bineshData';
 import {
   submitConsultationRequest,
   trackConsultationByCode,
   TrackedConsultationInfo
 } from '../lib/submitRequest';
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback below
+  }
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+export const TrackingCodeCopyBox: React.FC<{
+  code: string;
+  helperText?: string;
+  className?: string;
+}> = ({ code, helperText, className = '' }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(code);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  return (
+    <div
+      className={`max-w-xs mx-auto p-3.5 sm:p-4 rounded-xl bg-[#EAF7F9] border border-[#08A9C5] space-y-2.5 text-center ${className}`}
+    >
+      <span className="text-[11px] text-[#435466] block">کد رهگیری اختصاصی شما:</span>
+      <div className="flex items-center justify-center gap-2 bg-white px-3 py-2 rounded-lg border border-[#08A9C5]/40">
+        <span className="font-mono-num text-base sm:text-lg font-bold text-[#062B4D] tracking-wider dir-ltr select-all">
+          {code}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className={`px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            copied
+              ? 'bg-emerald-600 text-white'
+              : 'bg-[#062B4D] hover:bg-[#087A9D] text-white'
+          }`}
+          title="کپی کردن کد رهگیری"
+        >
+          {copied ? (
+            <>
+              <Check className="w-3.5 h-3.5" />
+              <span>کپی شد</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5" />
+              <span>کپی کد</span>
+            </>
+          )}
+        </button>
+      </div>
+      {helperText && (
+        <span className="text-[11px] text-[#64748B] block leading-relaxed">{helperText}</span>
+      )}
+    </div>
+  );
+};
 
 interface BineshLogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -22,9 +101,9 @@ export const BineshLogo: React.FC<BineshLogoProps> = ({
   className = ''
 }) => {
   const heightClasses = {
-    sm: 'h-4 md:h-5',
-    md: 'h-5 md:h-6',
-    lg: 'h-6 md:h-8'
+    sm: 'h-4 sm:h-4.5 md:h-5',
+    md: 'h-4.5 sm:h-5 md:h-6',
+    lg: 'h-5 sm:h-6 md:h-8'
   };
 
   if (variant === 'dark-bg') {
@@ -35,9 +114,11 @@ export const BineshLogo: React.FC<BineshLogoProps> = ({
       >
         <img
           src="/assets/brand/binesh-logo.svg"
-          alt="لوگوی رسمی بینش (Binesh)"
+          alt="لوگوی رسمی بینش (Binesh) — مشاوره هوش تجاری و تحلیل داده"
           width={2960}
           height={370}
+          loading="eager"
+          decoding="async"
           draggable={false}
           className={`${heightClasses[size]} w-auto block select-none`}
         />
@@ -52,9 +133,11 @@ export const BineshLogo: React.FC<BineshLogoProps> = ({
     >
       <img
         src="/assets/brand/binesh-logo.svg"
-        alt="لوگوی رسمی بینش (Binesh)"
+        alt="لوگوی رسمی بینش (Binesh) — مشاوره هوش تجاری و تحلیل داده"
         width={2960}
         height={370}
+        loading="eager"
+        decoding="async"
         draggable={false}
         className={`${heightClasses[size]} w-auto block select-none`}
       />
@@ -253,7 +336,7 @@ export const VideoPlaceholder: React.FC<VideoPlaceholderProps> = ({
           >
             <Play className="w-7 h-7 fill-current ml-0.5" />
           </button>
-          <h4 className="mt-4 text-base sm:text-lg font-bold text-white">{title}</h4>
+          <h3 className="mt-4 text-base sm:text-lg font-bold text-white">{title}</h3>
           <p className="mt-1.5 text-xs sm:text-sm text-white/85 leading-relaxed">{subtitle}</p>
         </div>
 
@@ -309,11 +392,17 @@ export const FaqList: React.FC<FaqListProps> = ({ items, showMascot = true }) =>
                   }`}
                 />
               </button>
-              {isOpen && (
-                <div className="px-5 pb-4 pt-1 text-xs sm:text-sm text-[#435466] leading-relaxed border-t border-[#E3EBF0]/60 bg-white">
-                  {item.answer}
+              <div
+                className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                  isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <div className="px-5 pb-4 pt-3 text-xs sm:text-sm text-[#435466] leading-relaxed border-t border-[#E3EBF0]/60 bg-white">
+                    {item.answer}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           );
         })}
@@ -440,20 +529,20 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#062B4D]/65 backdrop-blur-xs p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#062B4D]/65 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
       onClick={resetAndClose}
     >
       <div
-        className="bg-white rounded-2xl border border-[#E3EBF0] max-w-lg w-full p-6 sm:p-7 shadow-xl my-auto"
+        className="bg-white rounded-2xl border border-[#E3EBF0] max-w-lg w-full p-4 sm:p-7 shadow-xl my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#E3EBF0]">
+        <div className="flex items-start justify-between gap-3 pb-4 border-b border-[#E3EBF0]">
           <div>
-            <h3 className="text-lg font-bold text-[#062B4D]">
-              جلسه رایگان عیب‌یابی داده و مشاوره
-            </h3>
+            <h2 className="text-base sm:text-lg font-bold text-[#062B4D]">
+              {UNIFIED_CTA_LABEL}
+            </h2>
             <p className="text-xs text-[#435466] mt-1 leading-relaxed">
-              ثبت درخواست جلسه ۱۵ دقیقه‌ای رایگان یا پیگیری درخواست قبلی با کد رهگیری
+              ثبت درخواست جلسه ۳۰ دقیقه‌ای کشف نیاز (رایگان) یا پیگیری درخواست قبلی با کد رهگیری
             </p>
           </div>
           <button
@@ -466,11 +555,11 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
         </div>
 
         {/* Fast Direct Contact Bar for busy managers */}
-        <div className="mt-3 p-3 rounded-xl bg-[#EAF7F9]/80 border border-[#08A9C5]/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="mt-3 p-3 rounded-xl bg-[#EAF7F9]/80 border border-[#08A9C5]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
           <span className="text-[#062B4D] font-medium">
             تمایلی به پر کردن فرم ندارید؟ ارتباط مستقیم:
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href="tel:09164006698"
               className="px-3 py-1.5 rounded-lg bg-[#062B4D] text-white font-mono-num font-bold hover:bg-[#087A9D] transition-colors dir-ltr"
@@ -525,7 +614,7 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
                 <label className="block text-xs font-medium text-[#263B50] mb-1.5">
                   کد رهگیری درخواست مشاوره
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
                     type="text"
                     value={lookupCode}
@@ -576,14 +665,12 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
         ) : submitted ? (
           <div className="py-6 text-center space-y-4">
             <Mascot name="success" className="mx-auto w-full max-w-[150px]" />
-            <h4 className="text-base font-bold text-[#062B4D]">درخواست شما با موفقیت ثبت شد.</h4>
+            <h3 className="text-base font-bold text-[#062B4D]">درخواست شما با موفقیت ثبت شد.</h3>
             {trackingCode && (
-              <div className="max-w-xs mx-auto p-3.5 rounded-xl bg-[#EAF7F9] border border-[#08A9C5] space-y-1">
-                <span className="text-[11px] text-[#435466] block">کد رهگیری اختصاصی شما:</span>
-                <span className="font-mono-num text-lg font-bold text-[#062B4D] block tracking-wider">
-                  {trackingCode}
-                </span>
-              </div>
+              <TrackingCodeCopyBox
+                code={trackingCode}
+                helperText="برای پیگیری وضعیت درخواست، کد رهگیری را کپی و نزد خود نگه دارید."
+              />
             )}
             <p className="text-xs sm:text-sm text-[#435466] max-w-sm mx-auto leading-relaxed">
               اطلاعات شما در سامانه ثبت شد و به اطلاع کارشناسان بینش رسید. پس از بررسی، برای هماهنگی جلسه با شما تماس می‌گیریم.
@@ -704,7 +791,7 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
                   disabled={submitting}
                   className="px-5 py-2.5 rounded-xl bg-[#087A9D] text-white text-xs font-medium hover:bg-[#062B4D] transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
                 >
-                  {submitting ? 'در حال ثبت درخواست...' : 'ارسال درخواست'}
+                  {submitting ? 'در حال ثبت درخواست...' : `ثبت ${UNIFIED_CTA_LABEL}`}
                 </button>
               </div>
               <p className="text-[11px] text-[#64748B] leading-relaxed">

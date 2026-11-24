@@ -8,21 +8,30 @@ import {
   ShieldCheck,
   CheckCircle2,
   Maximize2,
-  X
+  X,
+  ArrowLeft
 } from 'lucide-react';
 import {
   RoutePath,
   PORTFOLIO_PLACEHOLDERS,
-  INSIGHTS_PLACEHOLDERS,
   PortfolioPlaceholderItem,
   InsightPlaceholderItem,
-  GENERAL_FAQS
+  GENERAL_FAQS,
+  UNIFIED_CTA_LABEL,
+  isPublicInsightPost
 } from '../data/bineshData';
-import { contactInfo as defaultContactInfo, ContactInfo } from '../data/contactInfo';
+import { getPortfolioRoute } from '../data/solutionsData';
+import { NavLink } from '../components/NavLink';
+import {
+  contactInfo as defaultContactInfo,
+  ContactInfo,
+  getSafeExternalUrl
+} from '../data/contactInfo';
 import {
   Mascot,
   FaqList,
-  FORM_SERVICE_OPTIONS
+  FORM_SERVICE_OPTIONS,
+  TrackingCodeCopyBox
 } from '../components/BrandComponents';
 import {
   submitConsultationRequest,
@@ -44,7 +53,7 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
   onNavigate,
   onOpenConsultation,
   portfolioItems = PORTFOLIO_PLACEHOLDERS,
-  insightPosts = INSIGHTS_PLACEHOLDERS,
+  insightPosts = [],
   siteContactInfo = defaultContactInfo
 }) => {
   const contactInfo = siteContactInfo;
@@ -115,7 +124,13 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
                     ۰{index + 1}
                   </span>
                   <h2 className="text-lg sm:text-2xl font-bold text-[#062B4D]">
-                    {project.title}
+                    <NavLink
+                      href={getPortfolioRoute(project)}
+                      onNavigate={onNavigate}
+                      className="hover:text-[#087A9D] transition-colors"
+                    >
+                      {project.title}
+                    </NavLink>
                   </h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -179,6 +194,17 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
                     <strong className="text-emerald-800 block mb-1">۳. نتیجه ملموس:</strong>
                     <span className="font-medium font-mono-num">{project.conclusion}</span>
                   </div>
+
+                  <div className="pt-1">
+                    <NavLink
+                      href={getPortfolioRoute(project)}
+                      onNavigate={onNavigate}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#062B4D] hover:bg-[#087A9D] text-white text-xs font-bold transition-colors"
+                    >
+                      <span>مشاهده صفحه اختصاصی مطالعه موردی {project.clientName}</span>
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </NavLink>
+                  </div>
                 </div>
 
                 {/* Left Column (RTL): Project Image Showcase */}
@@ -194,8 +220,9 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
                   >
                     <img
                       src={project.image}
-                      alt={project.title}
+                      alt={`نمای داشبورد و گزارش تحلیلی پروژه ${project.title} — ${project.serviceType}`}
                       loading="lazy"
+                      decoding="async"
                       className="w-full h-auto block group-hover:scale-[1.01] transition-transform duration-300"
                     />
                     <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-[#062B4D]/85 backdrop-blur-xs text-white text-xs inline-flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
@@ -227,7 +254,7 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
             onClick={() => onOpenConsultation()}
             className="px-6 py-3.5 rounded-xl bg-[#08A9C5] hover:bg-[#3CDDDD] text-[#062B4D] font-bold text-xs sm:text-sm transition-colors shrink-0 cursor-pointer"
           >
-            درخواست جلسه مشاوره
+            {UNIFIED_CTA_LABEL}
           </button>
         </div>
 
@@ -256,7 +283,9 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
               <div className="p-3 sm:p-4 bg-[#062B4D] max-h-[82vh] overflow-auto flex items-center justify-center">
                 <img
                   src={selectedPortfolioImage.src}
-                  alt={selectedPortfolioImage.title}
+                  alt={`نمای تمام‌صفحه پروژه ${selectedPortfolioImage.title}`}
+                  loading="lazy"
+                  decoding="async"
                   className="max-w-full h-auto rounded-lg"
                 />
               </div>
@@ -278,7 +307,8 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
       'هوش تجاری',
       'تحلیل مالی و فروش'
     ];
-    const filteredPosts = insightPosts.filter((post) => {
+    const publishedPosts = insightPosts.filter(isPublicInsightPost);
+    const filteredPosts = publishedPosts.filter((post) => {
       const matchCat =
         insightCategoryFilter === 'همه' || post.category === insightCategoryFilter;
       const matchSearch =
@@ -306,7 +336,7 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
               </p>
             </div>
             <div className="lg:col-span-5">
-              <Mascot name="reader" className="mx-auto w-full max-w-[360px]" />
+              <Mascot name="reader" priority className="mx-auto w-full max-w-[360px]" />
             </div>
           </div>
 
@@ -329,7 +359,7 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
               ))}
             </div>
 
-            <div className="relative min-w-[260px]">
+            <div className="relative w-full md:w-auto md:min-w-[260px]">
               <Search className="w-4 h-4 text-[#64748B] absolute right-3.5 top-3" />
               <input
                 type="text"
@@ -343,7 +373,32 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
         </div>
 
         {/* Insights Grid */}
-        {filteredPosts.length === 0 ? (
+        {publishedPosts.length === 0 ? (
+          <div className="rounded-2xl bg-white border border-[#E3EBF0] p-8 sm:p-10 text-center space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-[#062B4D]">
+              مقالات تخصصی بینش‌نامه به‌زودی منتشر می‌شوند
+            </h2>
+            <p className="text-xs sm:text-sm text-[#435466] max-w-xl mx-auto leading-relaxed">
+              در حال حاضر مقاله منتشرشده‌ای در این بخش ثبت نشده است. تا زمان انتشار مطالب جدید، می‌توانید از راهکارهای تخصصی و دموهای زنده بینش بازدید کنید.
+            </p>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <NavLink
+                href="/solutions"
+                onNavigate={onNavigate}
+                className="px-4 py-2 rounded-xl bg-[#087A9D] hover:bg-[#062B4D] text-white text-xs font-bold transition-colors"
+              >
+                مشاهده راهکارهای هوش تجاری
+              </NavLink>
+              <NavLink
+                href="/demos"
+                onNavigate={onNavigate}
+                className="px-4 py-2 rounded-xl bg-[#F7FAFC] hover:bg-[#EAF7F9] border border-[#E3EBF0] text-[#062B4D] text-xs font-bold transition-colors"
+              >
+                تجربه زنده دموها
+              </NavLink>
+            </div>
+          </div>
+        ) : filteredPosts.length === 0 ? (
           <div className="rounded-2xl bg-white border border-[#E3EBF0] p-8 text-center text-sm text-[#435466]">
             موردی با این مشخصات پیدا نشد.
           </div>
@@ -644,7 +699,7 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
               </p>
             </div>
             <div className="lg:col-span-5">
-              <Mascot name="security" className="mx-auto w-full max-w-[340px]" />
+              <Mascot name="security" priority className="mx-auto w-full max-w-[340px]" />
             </div>
           </div>
 
@@ -729,9 +784,14 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
       contactInfo.address ||
       contactInfo.workingHours
   );
-  const hasSocialLinks = Boolean(
-    contactInfo.linkedin || contactInfo.telegram || contactInfo.otherSocial
-  );
+  const socialItems = [
+    { key: 'instagram', label: 'اینستاگرام', href: getSafeExternalUrl(contactInfo.instagram) },
+    { key: 'telegram', label: 'تلگرام', href: getSafeExternalUrl(contactInfo.telegram) },
+    { key: 'bale', label: 'بله', href: getSafeExternalUrl(contactInfo.bale) },
+    { key: 'linkedin', label: 'لینکدین', href: getSafeExternalUrl(contactInfo.linkedin) }
+  ].filter((item): item is { key: string; label: string; href: string } => Boolean(item.href));
+
+  const hasSocialLinks = socialItems.length > 0 || Boolean(contactInfo.otherSocial);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 space-y-14">
@@ -749,6 +809,7 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
 
           <Mascot
             name="help"
+            priority
             className="mx-auto w-full max-w-[180px] sm:max-w-[220px]"
           />
 
@@ -811,32 +872,26 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
           )}
 
           {hasSocialLinks && (
-            <div className="pt-4 border-t border-[#E3EBF0] flex flex-wrap gap-2 text-xs">
-              {contactInfo.linkedin && (
-                <a
-                  href={contactInfo.linkedin}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] text-[#435466]"
-                >
-                  LinkedIn
-                </a>
-              )}
-              {contactInfo.telegram && (
-                <a
-                  href={contactInfo.telegram}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] text-[#435466]"
-                >
-                  Telegram
-                </a>
-              )}
-              {contactInfo.otherSocial && (
-                <span className="px-3.5 py-2 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] text-[#435466]">
-                  {contactInfo.otherSocial}
-                </span>
-              )}
+            <div className="pt-4 border-t border-[#E3EBF0] space-y-2.5">
+              <span className="text-xs font-bold text-[#062B4D] block">شبکه‌های اجتماعی بینش:</span>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {socialItems.map((item) => (
+                  <a
+                    key={item.key}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2 rounded-xl bg-[#EAF7F9] border border-[#08A9C5]/30 text-[#062B4D] font-bold hover:bg-[#08A9C5] hover:text-white transition-colors"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+                {contactInfo.otherSocial && (
+                  <span className="px-3.5 py-2 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0] text-[#435466]">
+                    {contactInfo.otherSocial}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -844,10 +899,10 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
         {/* Left Column: Consultation Form (§14) */}
         <div className="lg:col-span-7 bg-white rounded-2xl border border-[#E3EBF0] p-6 sm:p-8">
           <h2 className="text-xl font-bold text-[#062B4D] mb-2">
-            درخواست جلسه مشاوره
+            {UNIFIED_CTA_LABEL}
           </h2>
           <p className="text-xs sm:text-sm text-[#435466] mb-6 leading-relaxed">
-            با تکمیل اطلاعات زیر، به ما کمک می‌کنید پیش از جلسه، آشنایی اولیه‌ای با کسب‌وکار و نیاز شما داشته باشیم.
+            با تکمیل اطلاعات زیر، به ما کمک می‌کنید پیش از جلسه ۳۰ دقیقه‌ای رایگان، آشنایی اولیه‌ای با کسب‌وکار و نیاز شما داشته باشیم.
           </p>
 
           {contactSubmitted ? (
@@ -860,17 +915,10 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
                 پس از بررسی اطلاعات، برای هماهنگی با شما تماس می‌گیریم.
               </p>
               {contactTrackingCode && (
-                <div className="p-4 rounded-xl bg-white border border-[#08A9C5]/50 max-w-xs mx-auto space-y-1">
-                  <span className="text-[11px] text-[#435466] block">
-                    کد رهگیری اختصاصی شما:
-                  </span>
-                  <span className="font-mono-num text-lg font-bold text-[#062B4D] tracking-wider dir-ltr block">
-                    {contactTrackingCode}
-                  </span>
-                  <span className="text-[11px] text-[#64748B] block">
-                    برای پیگیری وضعیت درخواست، این کد را نزد خود نگه دارید.
-                  </span>
-                </div>
+                <TrackingCodeCopyBox
+                  code={contactTrackingCode}
+                  helperText="برای پیگیری وضعیت درخواست، این کد را کپی و نزد خود نگه دارید."
+                />
               )}
               <button
                 type="button"
@@ -997,18 +1045,18 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
                     disabled={contactSubmitting}
                     className="px-6 py-3 rounded-xl bg-[#087A9D] text-white text-sm font-medium hover:bg-[#062B4D] transition-colors cursor-pointer disabled:opacity-60"
                   >
-                    ارسال درخواست
+                    {contactSubmitting ? 'در حال ثبت...' : UNIFIED_CTA_LABEL}
                   </button>
                 </div>
                 <p className="text-[11px] text-[#64748B] leading-relaxed">
                   اطلاعات ثبت‌شده فقط برای بررسی درخواست و هماهنگی ارتباط استفاده می‌شود. جزئیات نحوه نگهداری و پردازش اطلاعات در بخش{' '}
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('/privacy')}
-                    className="text-[#087A9D] font-medium hover:underline cursor-pointer"
+                  <NavLink
+                    href="/privacy"
+                    onNavigate={onNavigate}
+                    className="text-[#087A9D] font-medium hover:underline"
                   >
                     حریم خصوصی و محرمانگی اطلاعات
-                  </button>{' '}
+                  </NavLink>{' '}
                   توضیح داده شده است.
                 </p>
               </div>
@@ -1028,18 +1076,21 @@ export const ContentPages: React.FC<ContentPagesProps> = ({
               اگر قبلاً درخواست مشاوره ثبت کرده‌اید، کد رهگیری خود (مانند BN-123456) را وارد کنید تا آخرین وضعیت بررسی را مشاهده نمایید.
             </p>
           </div>
-          <form onSubmit={handleTrackLookup} className="flex items-center gap-2 shrink-0">
+          <form
+            onSubmit={handleTrackLookup}
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full md:w-auto"
+          >
             <input
               type="text"
               value={lookupCode}
               onChange={(e) => setLookupCode(e.target.value)}
               placeholder="مثال: BN-123456"
-              className="px-3.5 py-2.5 text-sm rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] focus:bg-white focus:border-[#08A9C5] focus:outline-none font-mono-num dir-ltr text-left w-44"
+              className="px-3.5 py-2.5 text-sm rounded-xl border border-[#E3EBF0] bg-[#F7FAFC] focus:bg-white focus:border-[#08A9C5] focus:outline-none font-mono-num dir-ltr text-left w-full sm:w-48"
             />
             <button
               type="submit"
               disabled={lookupLoading}
-              className="px-4 py-2.5 rounded-xl bg-[#062B4D] text-white text-xs font-medium hover:bg-[#087A9D] cursor-pointer disabled:opacity-60"
+              className="px-4 py-2.5 rounded-xl bg-[#062B4D] text-white text-xs font-medium hover:bg-[#087A9D] cursor-pointer disabled:opacity-60 whitespace-nowrap"
             >
               {lookupLoading ? 'در حال بررسی...' : 'بررسی وضعیت'}
             </button>

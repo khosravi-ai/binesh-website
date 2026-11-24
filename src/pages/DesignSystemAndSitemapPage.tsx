@@ -40,7 +40,7 @@ const MASCOT_GALLERY_ITEMS: {
   {
     name: 'empty',
     title: '۶. ماسکات حالت خالی (empty)',
-    placement: 'حالت‌های خالی پنل مشتریان (/portal) و بخش نمونه‌کارها'
+    placement: 'حالت‌های خالی جست‌وجو و بخش نمونه‌کارها'
   },
   {
     name: 'success',
@@ -169,14 +169,8 @@ export const DesignSystemAndSitemapPage: React.FC<DesignSystemAndSitemapPageProp
     {
       route: '/auth',
       title: 'ورود به حساب بینش',
-      group: 'سیستم کاربری و پورتال',
-      desc: 'ورود، ایجاد حساب کاربری و بازیابی رمز عبور'
-    },
-    {
-      route: '/portal',
-      title: 'فضای اختصاصی همکاری شما با بینش',
-      group: 'سیستم کاربری و پورتال',
-      desc: 'نمای کلی، داشبوردهای من، گزارش‌های من، درخواست‌های تحلیل، جلسات مشاوره، اهداف و اقدامات، فایل‌ها و تنظیمات'
+      group: 'سیستم کاربری',
+      desc: 'ورود به حساب کاربری و پنل مدیریت'
     }
   ];
 
@@ -400,7 +394,9 @@ export const DesignSystemAndSitemapPage: React.FC<DesignSystemAndSitemapPageProp
               <div className="flex items-center gap-4 p-4 rounded-xl bg-[#F7FAFC] border border-[#E3EBF0]">
                 <img
                   src="/favicon-96x96.png"
-                  alt="Site Icon Preview"
+                  alt="پیش‌نمایش آیکون رسمی وب‌سایت بینش"
+                  loading="lazy"
+                  decoding="async"
                   className="w-12 h-12 rounded-lg border border-[#E3EBF0] object-cover"
                 />
                 <div className="text-xs space-y-1 font-mono-num text-[#263B50] dir-ltr">

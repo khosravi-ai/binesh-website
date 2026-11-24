@@ -6,14 +6,26 @@ export type RoutePath =
   | '/services/consulting'
   | '/demos'
   | '/portfolio'
+  | '/portfolio/kabino-wood'
+  | '/portfolio/paytakht-office'
+  | '/portfolio/takapoo'
+  | '/portfolio/arya-pakhsh'
+  | '/solutions'
+  | '/solutions/power-bi-sepidar'
+  | '/solutions/power-bi-holoo'
+  | '/solutions/distribution-sales'
+  | '/solutions/trading-sales'
+  | '/solutions/finance'
+  | '/solutions/shiraz'
   | '/insights'
   | '/about'
   | '/contact'
   | '/privacy'
   | '/auth'
-  | '/portal'
   | '/admin'
   | '/design-system';
+
+export const UNIFIED_CTA_LABEL = 'جلسه ۳۰ دقیقه‌ای کشف نیاز (رایگان)';
 
 export interface SubServiceItem {
   id: number;
@@ -290,7 +302,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
 export const COLLABORATION_STEPS = [
   {
     step: '۰۱',
-    title: 'جلسه کشف نیاز (۱۵ دقیقه رایگان)',
+    title: 'جلسه ۳۰ دقیقه‌ای کشف نیاز (رایگان)',
     subtitle: 'گام اول',
     description:
       'بررسی چالش‌های گزارش‌گیری و تصمیم‌گیری شرکت شما بدون نیاز به ارسال داده‌های محرمانه.'
@@ -341,7 +353,7 @@ export const PORTFOLIO_PLACEHOLDERS: PortfolioPlaceholderItem[] = [
     projectSubtitle: 'داشبورد مدیریتی و مالی',
     industry: 'تولید و فروش مصنوعات چوبی',
     serviceType: 'داشبورد Power BI + وب‌اپلیکیشن مدیریتی',
-    image: '/assets/aistudio/Kabinowood_9a6089ec.png',
+    image: '/assets/aistudio/Kabinowood_9a6089ec.webp',
     intro: [
       'پراکندگی اطلاعات فروش، هزینه‌های کارگاه و سررسید چک‌ها در فایل‌های متعدد اکسل و نبود تصویر لحظه‌ای از سود خالص و نقدینگی.'
     ],
@@ -366,7 +378,7 @@ export const PORTFOLIO_PLACEHOLDERS: PortfolioPlaceholderItem[] = [
     projectSubtitle: 'سامانه مدیریت فروش و موجودی',
     industry: 'فروش تجهیزات و ملزومات اداری',
     serviceType: 'طراحی و توسعه وب‌اپلیکیشن اختصاصی',
-    image: '/assets/aistudio/Paytakht_9c0051a0.png',
+    image: '/assets/aistudio/Paytakht_9c0051a0.webp',
     intro: [
       'عدم هماهنگی لحظه‌ای بین موجودی انبار و ثبت سفارش‌های فروش که منجر به کسری کالاهای پرفروش و تأخیر در تحویل می‌شد.'
     ],
@@ -391,7 +403,7 @@ export const PORTFOLIO_PLACEHOLDERS: PortfolioPlaceholderItem[] = [
     projectSubtitle: 'پایش و بررسی اطلاعات فروش',
     industry: 'پخش و توزیع مویرگی',
     serviceType: 'مهندسی داده و داشبورد کنترل فروش',
-    image: '/assets/aistudio/takapoo_e1ef8f05.png',
+    image: '/assets/aistudio/takapoo_e1ef8f05.webp',
     intro: [
       'حجم بالای فاکتورهای روزانه و دشواری کشف مغایرت‌های قیمتی، تخفیف‌های خارج از ضابطه و خطاهای ثبت دستی.'
     ],
@@ -416,7 +428,7 @@ export const PORTFOLIO_PLACEHOLDERS: PortfolioPlaceholderItem[] = [
     projectSubtitle: 'تحلیل فروش و عملکرد شعب',
     industry: 'پخش و توزیع مواد غذایی',
     serviceType: 'داشبورد هوش تجاری (Power BI)',
-    image: '/assets/aistudio/aria_a72537c2.png',
+    image: '/assets/aistudio/aria_a72537c2.webp',
     intro: [
       'گزارش‌های جزیره‌ای شعب مختلف که مقایسه تحقق اهداف فروش (Target vs Actual) و رفتار خرید مشتریان را زمان‌بر می‌کرد.'
     ],
@@ -443,6 +455,31 @@ export interface InsightPlaceholderItem {
   title: string;
   excerpt: string;
   statusNote: string;
+  isPublished?: boolean;
+}
+
+export function isDraftInsightStatus(statusNote?: string | null): boolean {
+  const normalized = String(statusNote || '')
+    .trim()
+    .replace(/\u200c/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes('در حال آماده') ||
+    normalized.includes('پیش نویس') ||
+    normalized.includes('پیشنویس') ||
+    normalized.includes('draft') ||
+    normalized.includes('coming soon')
+  );
+}
+
+export function isPublicInsightPost(post: {
+  statusNote?: string | null;
+  isPublished?: boolean;
+}): boolean {
+  if (post.isPublished === false) return false;
+  return !isDraftInsightStatus(post.statusNote);
 }
 
 export const INSIGHTS_PLACEHOLDERS: InsightPlaceholderItem[] = [

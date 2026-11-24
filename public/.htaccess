@@ -1,0 +1,20 @@
+# Canonical 301 Redirects for https://bineshbi.ir (Single-Hop, No Redirect Chains)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 1. Single-hop redirect for HTTP or www + strip trailing slash on non-root internal paths
+  RewriteCond %{HTTPS} !=on [OR]
+  RewriteCond %{HTTP_HOST} ^www\.bineshbi\.ir$ [NC]
+  RewriteCond %{REQUEST_URI} ^/(.+?)/+$
+  RewriteRule ^ https://bineshbi.ir/%1 [R=301,L]
+
+  # 2. Single-hop redirect for HTTP or www (root or already non-trailing-slash path)
+  RewriteCond %{HTTPS} !=on [OR]
+  RewriteCond %{HTTP_HOST} ^www\.bineshbi\.ir$ [NC]
+  RewriteRule ^(.*)$ https://bineshbi.ir/$1 [R=301,L]
+
+  # 3. Strip trailing slash on internal routes (except root / and /api/)
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_URI} !^/api/
+  RewriteRule ^(.+?)/+$ https://bineshbi.ir/$1 [R=301,L]
+</IfModule>

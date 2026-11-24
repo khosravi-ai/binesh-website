@@ -26,7 +26,7 @@ export async function dispatchNewConsultationNotifications(
   const adminPhone =
     settings.notifyAdminPhone || process.env.NOTIFY_ADMIN_PHONE || '09164006698';
   const adminEmail =
-    settings.notifyAdminEmail || process.env.NOTIFY_ADMIN_EMAIL || 'binesh.office@gmail.com';
+    settings.notifyAdminEmail || process.env.NOTIFY_ADMIN_EMAIL || 'info@bineshbi.ir';
 
   const smsText = `بینش | درخواست مشاوره جدید\nکد رهگیری: ${record.trackingCode}\nنام: ${record.fullName}\nتلفن: ${record.phone}\nخدمت: ${record.service}`;
 
@@ -90,7 +90,7 @@ export async function dispatchNewConsultationNotifications(
   const smtpPort = Number(settings.smtpPort || process.env.SMTP_PORT || 587);
   const smtpUser = settings.smtpUser || process.env.SMTP_USER || '';
   const smtpPass = settings.smtpPass || process.env.SMTP_PASS || '';
-  const smtpFrom = settings.smtpFrom || process.env.SMTP_FROM || smtpUser || 'noreply@binesh.ir';
+  const smtpFrom = settings.smtpFrom || process.env.SMTP_FROM || smtpUser || 'noreply@bineshbi.ir';
 
   if (smtpHost && smtpUser && smtpPass && adminEmail) {
     try {

@@ -8,8 +8,14 @@ Allow: /favicon-192x192.png
 Allow: /apple-touch-icon.png
 Allow: /favicon.svg
 
+Disallow: /admin
+Disallow: /admin/
+Disallow: /auth
+Disallow: /portal
 Disallow: /portal/
+Disallow: /api/
+Disallow: /design-system
 Disallow: /demo-webapp.html
 Disallow: /demo-powerbi.html
 
-Sitemap: /sitemap.xml
+Sitemap: https://bineshbi.ir/sitemap.xml

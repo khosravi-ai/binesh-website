@@ -7,8 +7,9 @@ import {
   ArrowLeft,
   RotateCw
 } from 'lucide-react';
-import { RoutePath } from '../data/bineshData';
+import { RoutePath, UNIFIED_CTA_LABEL } from '../data/bineshData';
 import { Mascot } from '../components/BrandComponents';
+import { NavLink } from '../components/NavLink';
 
 interface DemosPagesProps {
   currentRoute: '/demos';
@@ -20,6 +21,7 @@ const WEB_DEMO_SRC = '/demo-webapp.html';
 const PBI_DEMO_SRC = '/demo-powerbi.html';
 
 export const DemosPages: React.FC<DemosPagesProps> = ({
+  onNavigate,
   onOpenConsultation
 }) => {
   const [activeDemo, setActiveDemo] = useState<'webapp' | 'powerbi'>('webapp');
@@ -43,7 +45,7 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs text-[#3CDDDD]">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>اتصال زنده و پایش بلادرنگ داده‌های کسب‌وکار</span>
+                <span>اتصال مستقیم و به‌روزرسانی لحظه‌ای داده‌های کسب‌وکار</span>
               </div>
             </div>
 
@@ -55,10 +57,27 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
               <li>• بدون نیاز به خروج از صفحه، هر دو محیط وب‌اپلیکیشن و Power BI را در قاب زیر امتحان کنید.</li>
               <li>• فیلترها، تب‌ها، نقشه استان‌ها و جداول کاملاً تعاملی هستند (با داده‌های فرضی و نمایشی).</li>
             </ul>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+              <NavLink
+                href="/services/dashboards"
+                onNavigate={onNavigate}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium transition-colors"
+              >
+                آشنایی با خدمات طراحی داشبورد ←
+              </NavLink>
+              <NavLink
+                href="/solutions"
+                onNavigate={onNavigate}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-[#3CDDDD] font-medium transition-colors"
+              >
+                راهکارهای اتصال به سپیدار و هلو ←
+              </NavLink>
+            </div>
           </div>
 
           <div className="lg:col-span-4">
-            <Mascot name="presenter" className="mx-auto w-full max-w-[240px]" />
+            <Mascot name="presenter" priority className="mx-auto w-full max-w-[240px]" />
           </div>
         </div>
 
@@ -147,7 +166,7 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
         }
       >
         {/* Top Conversion Banner Inside Frame */}
-        <div className="bg-gradient-to-l from-[#062B4D] via-[#093863] to-[#087A9D] px-4 sm:px-6 py-3 border-b border-white/15 flex flex-wrap items-center justify-between gap-3 text-white">
+        <div className="bg-gradient-to-l from-[#062B4D] via-[#093863] to-[#087A9D] px-4 sm:px-6 py-3 border-b border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-white">
           <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span>
@@ -156,33 +175,33 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <button
               type="button"
               onClick={() => onOpenConsultation(currentTitle)}
-              className="px-4 py-2 rounded-xl bg-[#3CDDDD] hover:bg-white text-[#062B4D] text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#3CDDDD] hover:bg-white text-[#062B4D] text-xs font-bold transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
             >
-              <span>درخواست طراحی داشبورد مشابه برای شرکت من</span>
+              <span>{UNIFIED_CTA_LABEL}</span>
               <ArrowLeft className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Browser Chrome Bar */}
-        <div className="bg-[#041E36] px-4 py-2.5 border-b border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-white/80">
+        <div className="bg-[#041E36] px-3 sm:px-4 py-2.5 border-b border-white/10 flex flex-wrap items-center justify-between gap-2.5 text-xs text-white/80">
           {/* Right: Browser Window Dots & Mode Switch */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+            <div className="hidden sm:flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-rose-500/80 inline-block" />
               <span className="w-3 h-3 rounded-full bg-amber-400/80 inline-block" />
               <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block" />
             </div>
 
-            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10">
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => setActiveDemo('webapp')}
-                className={`px-3 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
                   activeDemo === 'webapp'
                     ? 'bg-[#08A9C5] text-[#062B4D]'
                     : 'text-white/75 hover:text-white'
@@ -193,7 +212,7 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveDemo('powerbi')}
-                className={`px-3 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
                   activeDemo === 'powerbi'
                     ? 'bg-[#08A9C5] text-[#062B4D]'
                     : 'text-white/75 hover:text-white'
@@ -211,7 +230,7 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
           </div>
 
           {/* Left: Reload & Expand Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mr-auto sm:mr-0">
             <button
               type="button"
               onClick={() => setIframeKey((k) => k + 1)}
@@ -242,7 +261,13 @@ export const DemosPages: React.FC<DemosPagesProps> = ({
         </div>
 
         {/* Embedded Interactive Iframe */}
-        <div className={expandedViewport ? 'flex-1 bg-white' : 'w-full h-[780px] bg-white'}>
+        <div
+          className={
+            expandedViewport
+              ? 'flex-1 bg-white'
+              : 'w-full h-[540px] sm:h-[680px] lg:h-[780px] bg-white'
+          }
+        >
           <iframe
             key={`${activeDemo}-${iframeKey}`}
             src={currentSrc}
