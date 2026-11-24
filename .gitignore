@@ -6,11 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-# Local database
-data/*.db
-data/*.db-shm
-data/*.db-wal
-data/*.db-journal
-
-# AI Studio temporary files
-.aistudio/artifacts/brain/

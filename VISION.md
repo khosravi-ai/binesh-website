@@ -27,8 +27,3 @@
 - **No Thin/Draft Content:** Draft or "در حال آماده‌سازی" articles must ONLY appear in `/admin`, never on public pages or in `sitemap.xml`.
 - **FAQ & Schema:** All FAQ answers (including collapsed items) must be rendered in initial HTML (toggle via CSS only) with `FAQPage` JSON-LD in `<head>`.
 - **Analytics:** Filter out bot/crawler User-Agents in SQLite analytics and display timestamps in `Asia/Tehran` time.
-
-## Database Rules (Production on cPanel Only)
-- **No DB in Repo:** The live database (SQLite/MySQL) exists ONLY on the cPanel server and is NOT included in this repository or deployment zips. Never commit `.db`, `.sqlite`, or `.env` files.
-- **Safe Auto-Migrations:** Any new table or column MUST be added safely on server startup (e.g., `CREATE TABLE IF NOT EXISTS`, checking column existence before `ALTER TABLE`) without dropping tables or losing existing production data.
-- **Schema Reference:** Always inspect `server.ts` (or database initialization files) to understand the current schema before writing queries.
